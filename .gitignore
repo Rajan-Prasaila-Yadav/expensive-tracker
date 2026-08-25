@@ -1,0 +1,48 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+dist-ssr/
+*.local
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Python / Django
+__pycache__/
+backend/**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+backend/venv/
+.venv/
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# Prisma
+/prisma/*.db
+/prisma/*.sqlite
+backend/prisma/*.db
