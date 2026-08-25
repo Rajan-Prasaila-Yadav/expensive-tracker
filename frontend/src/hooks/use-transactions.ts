@@ -27,8 +27,8 @@ function loadStorage<T>(key: string, fallback: T): T {
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      if (parsed && !Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as T;
+      if (parsed && !Array.isArray(parsed)) return parsed as T;
     }
   } catch (e) {
     console.warn(`Failed to parse ${key} from storage:`, e);
