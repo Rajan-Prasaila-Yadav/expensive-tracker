@@ -182,7 +182,7 @@ export default function SettingsPage() {
     try {
       await apiClient.post("/auth/change-password/", { currentPassword: currentPw, newPassword: newPw });
       setCurrentPw(""); setNewPw(""); setConfirmPw("");
-      toast.success("Password successfully updated in PostgreSQL database!");
+      toast.success("Password successfully updated!");
     } catch (err: any) {
       const msg = err.response?.data?.error || "Failed to update password. Check your current password.";
       toast.error(msg);
@@ -241,7 +241,7 @@ export default function SettingsPage() {
               System & User Settings
             </motion.h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Control account profile, database sync, active devices, and regional preferences
+              Control account profile, security, active devices, and regional preferences
             </p>
           </div>
 
@@ -299,7 +299,7 @@ export default function SettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base font-bold">Personal Profile & Identity</CardTitle>
-                  <CardDescription className="text-xs">Your account details stored securely in PostgreSQL</CardDescription>
+                  <CardDescription className="text-xs">Your account profile and regional preferences</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -308,7 +308,7 @@ export default function SettingsPage() {
                       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your full name" className="h-9 text-xs" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs">Email Address (Supabase Auth)</Label>
+                      <Label className="text-xs">Email Address</Label>
                       <Input value={email} disabled placeholder="Your registered email" className="h-9 text-xs bg-muted/40 cursor-not-allowed" />
                     </div>
                     <div className="space-y-1.5">
