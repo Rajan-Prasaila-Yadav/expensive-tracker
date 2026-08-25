@@ -21,8 +21,8 @@ COPY . /app/
 
 WORKDIR /app/backend
 
-RUN python -m prisma generate
+RUN python -m prisma generate --schema=prisma/schema.prisma
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4"]
+CMD ["sh", "-c", "python -m prisma db push --schema=prisma/schema.prisma && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4"]

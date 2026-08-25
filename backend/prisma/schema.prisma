@@ -1,0 +1,250 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider                   = "prisma-client-py"
+  interface                  = "sync"
+  recursive_type_depth       = 5
+  enable_experimental_decimal = true
+}
+
+// =============================================================
+// USER & SETTINGS
+// =============================================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  phone        String?
+  avatar       String?
+  currency     String    @default("INR")
+  timezone     String    @default("Asia/Kolkata")
+  language     String    @default("en")
+  dateFormat   String    @default("dd-MM-yyyy") @map("date_format")
+  passwordHash String    @map("password_hash")
+  is2FAEnabled Boolean   @default(false) @map("is_2fa_enabled")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  transactions   Transaction[]
+  categories     Category[]
+  incomeSources  IncomeSource[]
+  paymentMethods PaymentMethod[]
+  budgets        Budget[]
+  devices        Device[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  settings       UserSettings?
+
+  @@map("users")
+}
+
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Notification Toggles
+  budgetAlerts      Boolean  @default(true) @map("budget_alerts")
+  transactionAlerts Boolean  @default(true) @map("transaction_alerts")
+  weeklyReport      Boolean  @default(true) @map("weekly_report")
+  monthlyReport     Boolean  @default(false) @map("monthly_report")
+  securityAlerts    Boolean  @default(true) @map("security_alerts")
+  emailDigest       Boolean  @default(false) @map("email_digest")
+
+  // Preferences
+  compactMode       Boolean  @default(false) @map("compact_mode")
+  showBalance       Boolean  @default(true) @map("show_balance")
+  animations        Boolean  @default(true)
+  theme             String   @default("system")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("user_settings")
+}
+
+// =============================================================
+// METADATA (Categories, Sources, Payment Methods)
+// =============================================================
+
+model Category {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  icon      String   @default("folder")
+  color     String   @default("#3b82f6")
+  type      String   @default("expense")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  transactions Transaction[]
+  budgets      Budget[]
+
+  @@index([userId])
+  @@map("categories")
+}
+
+model IncomeSource {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  type       String   @default("salary")
+  icon       String   @default("briefcase")
+  color      String   @default("#22c55e")
+  monthlyAvg Decimal  @default(0.0) @map("monthly_avg") @db.Decimal(12, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("income_sources")
+}
+
+model PaymentMethod {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  type      String   @default("bank")
+  icon      String   @default("card")
+  last4     String?
+  balance   Decimal  @default(0.0) @db.Decimal(12, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  // Relations
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("payment_methods")
+}
+
+// =============================================================
+// TRANSACTIONS
+// =============================================================
+
+model Transaction {
+  id              String         @id @default(uuid())
+  userId          String         @map("user_id")
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type            String         @default("expense")
+  amount          Decimal        @db.Decimal(12, 2)
+  title           String
+  date            DateTime       @db.Date
+  time            String
+  status          String         @default("completed")
+
+  // Category and Method Relations
+  categoryId      String?        @map("category_id")
+  category        Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  paymentMethodId String?        @map("payment_method_id")
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+
+  // Transfer specific fields
+  fromMethodId    String?        @map("from_method_id")
+  toMethodId      String?        @map("to_method_id")
+
+  // Receipt and Notes
+  receiptUrl      String?        @map("receipt_url")
+  notes           String?
+  tags            String[]       @default([])
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  @@index([userId, date])
+  @@index([userId, type])
+  @@index([userId, categoryId])
+  @@map("transactions")
+}
+
+// =============================================================
+// BUDGETS
+// =============================================================
+
+model Budget {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  categoryId  String   @map("category_id")
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  period      String   @default("monthly")
+  limitAmount Decimal  @map("limit_amount") @db.Decimal(12, 2)
+  startDate   DateTime @map("start_date") @db.Date
+  endDate     DateTime @map("end_date") @db.Date
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([userId, categoryId, period, startDate])
+  @@index([userId])
+  @@map("budgets")
+}
+
+// =============================================================
+// AUDIT LOGS, NOTIFICATIONS & DEVICES
+// =============================================================
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  device    String?
+  browser   String?
+  os        String?
+  ip        String?
+  result    String   @default("success")
+  details   String?
+  timestamp DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title     String
+  message   String
+  type      String   @default("info")
+  read      Boolean  @default(false)
+
+  timestamp DateTime @default(now())
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model Device {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  os         String
+  browser    String
+  isCurrent  Boolean  @default(false) @map("is_current")
+  lastActive DateTime @default(now()) @map("last_active")
+
+  @@map("devices")
+}
