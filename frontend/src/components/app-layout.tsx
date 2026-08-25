@@ -4,9 +4,11 @@ import AppSidebar from "./app-sidebar.tsx";
 import BottomNav from "./bottom-nav.tsx";
 import SplashScreen from "./splash-screen.tsx";
 import PwaInstallModal from "./pwa-install-modal.tsx";
-import { Menu, Wallet, Bell, Download } from "lucide-react";
+import ThemeToggle from "./theme-toggle.tsx";
+import { Menu, Wallet, Bell, Download, ShieldCheck, User } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { NOTIFICATIONS } from "@/lib/mock-data.ts";
+import { useAuth } from "@/hooks/use-auth.ts";
 
 type Props = { children: ReactNode };
 
@@ -14,6 +16,7 @@ export default function AppLayout({ children }: Props) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
   const unread = NOTIFICATIONS.filter((n) => !n.read).length;
 
   // Automatically close mobile menu when route changes
@@ -42,7 +45,7 @@ export default function AppLayout({ children }: Props) {
       <AppSidebar onOpenInstallModal={() => setInstallModalOpen(true)} />
 
       {/* Mobile Top App Bar (Sticky) */}
-      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3.5 py-2.5 bg-card/90 backdrop-blur-md border-b border-border/80 safe-area-inset-top">
+      <header className="md:hidden sticky top-0 z-30 flex items-center justify-between px-3.5 py-2.5 bg-card/90 backdrop-blur-md border-b border-border/80 safe-area-inset-top shadow-xs">
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -62,6 +65,8 @@ export default function AppLayout({ children }: Props) {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <ThemeToggle />
+
           <button
             type="button"
             onClick={() => setInstallModalOpen(true)}
@@ -122,9 +127,63 @@ export default function AppLayout({ children }: Props) {
       </AnimatePresence>
 
       {/* Main Content Viewport */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full pb-20 md:pb-6">
-        {children}
-      </main>
+      <div className="flex-1 flex flex-col min-w-0 max-w-full h-full overflow-hidden">
+        {/* Desktop Top Bar */}
+        <header className="hidden md:flex items-center justify-between px-6 py-2.5 border-b border-border/70 bg-card/60 backdrop-blur-md shrink-0 z-20">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium text-[11px] border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Live Cloud Sync
+            </span>
+            <span className="opacity-40">•</span>
+            <span className="text-foreground/80 font-medium">FinanceOS Workspace</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setInstallModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-xl transition-colors cursor-pointer"
+            >
+              <Download size={14} />
+              <span>Install App</span>
+            </button>
+
+            <Link
+              to="/notifications"
+              className="relative p-2 rounded-xl text-foreground hover:bg-muted border border-border/60 transition-colors cursor-pointer flex items-center"
+              title="Notifications"
+            >
+              <Bell size={17} />
+              {unread > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[var(--color-expense)] text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                  {unread}
+                </span>
+              )}
+            </Link>
+
+            <ThemeToggle />
+
+            {user && (
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 pl-2 pr-3 py-1 rounded-xl bg-muted/60 hover:bg-muted border border-border/60 transition-colors cursor-pointer ml-1"
+                title="Your Profile"
+              >
+                <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-[10px]">
+                  {user.name ? user.name[0].toUpperCase() : "U"}
+                </div>
+                <span className="text-xs font-medium text-foreground max-w-[100px] truncate">{user.name || "User"}</span>
+              </Link>
+            )}
+          </div>
+        </header>
+
+        {/* Scrollable Page Viewport */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full pb-20 md:pb-6">
+          {children}
+        </main>
+      </div>
 
       {/* Mobile Bottom Navigation Bar */}
       <BottomNav />
