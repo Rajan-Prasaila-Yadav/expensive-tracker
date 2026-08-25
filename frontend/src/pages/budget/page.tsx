@@ -19,23 +19,47 @@ import { IconOrLogoDisplay } from "@/pages/categories/page.tsx";
 
 type PeriodFilter = "all" | "monthly" | "weekly" | "yearly";
 
+const BUDGET_STORAGE_KEY = "financeos_budgets_v1";
+
+function loadStoredBudgets(): Budget[] {
+  try {
+    const raw = localStorage.getItem(BUDGET_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to parse stored budgets:", e);
+  }
+  return [];
+}
+
 export default function BudgetPage() {
   const { transactions, categories } = useTransactions();
-  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>(loadStoredBudgets);
   const [editing, setEditing] = useState<Budget | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState<Budget | null>(null);
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("all");
 
+  // Keep localStorage in sync with budgets state
+  useEffect(() => {
+    try {
+      localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(budgets));
+    } catch (e) {
+      console.warn("Failed to save budgets to storage:", e);
+    }
+  }, [budgets]);
+
   // Fetch budgets from Django REST API on mount
   const fetchBudgets = useCallback(async () => {
     try {
       const res = await apiClient.get("/budgets/");
-      if (Array.isArray(res.data)) {
+      if (Array.isArray(res.data) && res.data.length > 0) {
         setBudgets(res.data);
       }
     } catch {
-      // silently fall back to empty
+      // Retain local state
     }
   }, []);
 
@@ -56,7 +80,7 @@ export default function BudgetPage() {
   const liveBudgets = useMemo(() => {
     return budgets.map((b) => {
       const liveSpent = transactions
-        .filter((t: Transaction) => t.categoryId === b.categoryId && t.type === "expense" && t.status === "completed")
+        .filter((t: Transaction) => t.categoryId === b.categoryId && t.type === "expense")
         .reduce((s: number, t: Transaction) => s + t.amount, 0);
       return { ...b, spent: liveSpent > 0 ? liveSpent : b.spent };
     });
@@ -74,33 +98,47 @@ export default function BudgetPage() {
 
   const handleSave = async (data: Omit<Budget, "id" | "spent" | "startDate" | "endDate">, existing: Budget | null) => {
     if (existing) {
-      // Update existing budget in PostgreSQL
-      setBudgets((prev) => prev.map((b) => (b.id === existing.id ? { ...b, ...data } : b)));
+      setBudgets((prev) => {
+        const next = prev.map((b) => (b.id === existing.id ? { ...b, ...data } : b));
+        localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
       try {
         await apiClient.put(`/budgets/${existing.id}/`, data);
-        toast.success("Budget updated in database!");
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to update budget in database");
+        toast.success("Budget updated successfully!");
+      } catch {
+        toast.success("Budget updated locally!");
       }
     } else {
-      // Create new budget in PostgreSQL
       const now = new Date();
       const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
+      const tempId = `budget-${Date.now()}`;
+
+      const catSpent = transactions
+        .filter((t: Transaction) => t.categoryId === data.categoryId && t.type === "expense")
+        .reduce((s: number, t: Transaction) => s + t.amount, 0);
+      const newBudget: Budget = { id: tempId, spent: catSpent, startDate, endDate, ...data };
+
+      setBudgets((prev) => {
+        const next = [...prev, newBudget];
+        localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
 
       try {
         const res = await apiClient.post("/budgets/", { ...data, startDate, endDate });
-        const catSpent = transactions
-          .filter((t: Transaction) => t.categoryId === data.categoryId && t.type === "expense" && t.status === "completed")
-          .reduce((s: number, t: Transaction) => s + t.amount, 0);
-        const newBudget: Budget = { id: res.data.id, spent: catSpent, startDate, endDate, ...data };
-        setBudgets((prev) => [...prev, newBudget]);
-        toast.success("Budget created in database!");
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to create budget in database");
+        if (res.data?.id) {
+          setBudgets((prev) => {
+            const next = prev.map((b) => (b.id === tempId ? { ...b, id: res.data.id } : b));
+            localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+        }
+        toast.success("Budget created successfully!");
+      } catch {
+        toast.success("Budget recorded locally!");
       }
     }
   };
@@ -108,13 +146,17 @@ export default function BudgetPage() {
   const handleDelete = async () => {
     if (!deleting) return;
     const id = deleting.id;
-    setBudgets((prev) => prev.filter((b) => b.id !== id));
+    setBudgets((prev) => {
+      const next = prev.filter((b) => b.id !== id);
+      localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
     setDeleting(null);
     try {
       await apiClient.delete(`/budgets/${id}/`);
-      toast.success("Budget deleted from database!");
+      toast.success("Budget deleted successfully!");
     } catch {
-      toast.success("Budget removed");
+      toast.success("Budget removed locally!");
     }
   };
 
