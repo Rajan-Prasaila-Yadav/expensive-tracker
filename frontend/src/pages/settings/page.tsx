@@ -16,10 +16,12 @@ import {
 import { toast } from "sonner";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
+import { Link } from "react-router-dom";
 import ThemeToggle from "@/components/theme-toggle.tsx";
 import apiClient from "@/lib/api-client.ts";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { useTransactions } from "@/components/providers/transaction-provider.tsx";
+import { NOTIFICATIONS } from "@/lib/mock-data.ts";
 
 type NotifKey = "budgetAlerts" | "transactionAlerts" | "weeklyReport" | "monthlyReport" | "securityAlerts" | "emailDigest";
 
@@ -227,10 +229,11 @@ export default function SettingsPage() {
   return (
     <AppLayout>
       <div className="p-4 sm:p-6 md:p-8 max-w-[840px] mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        {/* Top Header with Theme Changer & Notification Icon */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
           <div>
             <motion.h1
-              className="text-2xl font-bold"
+              className="text-xl sm:text-2xl font-bold tracking-tight text-foreground"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
@@ -241,24 +244,52 @@ export default function SettingsPage() {
               Control account profile, database sync, active devices, and regional preferences
             </p>
           </div>
-          <ThemeToggle />
+
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <Link
+              to="/notifications"
+              className="relative p-2 rounded-xl border border-border/80 bg-card hover:bg-muted text-foreground transition-all cursor-pointer shadow-xs flex items-center gap-1.5 text-xs font-medium"
+              title="View notifications"
+            >
+              <Bell size={16} className="text-primary" />
+              <span className="text-xs">Alerts</span>
+              {NOTIFICATIONS.filter((n) => !n.read).length > 0 && (
+                <span className="bg-[var(--color-expense)] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                  {NOTIFICATIONS.filter((n) => !n.read).length}
+                </span>
+              )}
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.05 }}>
-          <Tabs defaultValue="general">
+          <Tabs defaultValue="general" className="w-full">
+            {/* Non-overlapping Adaptive Tabs */}
             <div className="w-full overflow-x-auto pb-1 mb-5 scrollbar-none">
-              <TabsList className="grid grid-cols-4 w-full h-auto p-1 gap-1">
-                <TabsTrigger value="general" className="gap-1.5 text-xs py-2">
-                  <Globe size={14} /> <span>General & Profile</span>
+              <TabsList className="flex flex-row items-center w-full min-w-[320px] sm:min-w-0 h-auto p-1 bg-muted/60 border border-border/60 rounded-xl gap-1">
+                <TabsTrigger value="general" className="flex-1 gap-1.5 text-xs py-2 px-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs transition-all font-medium">
+                  <Globe size={14} className="shrink-0 text-primary" />
+                  <span className="truncate">General</span>
+                  <span className="hidden md:inline text-[11px] opacity-70">& Profile</span>
                 </TabsTrigger>
-                <TabsTrigger value="notifications" className="gap-1.5 text-xs py-2">
-                  <Bell size={14} /> <span>Alerts & Notifications</span>
+
+                <TabsTrigger value="notifications" className="flex-1 gap-1.5 text-xs py-2 px-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs transition-all font-medium">
+                  <Bell size={14} className="shrink-0 text-amber-500" />
+                  <span className="truncate">Alerts</span>
+                  <span className="hidden md:inline text-[11px] opacity-70">& Notifs</span>
                 </TabsTrigger>
-                <TabsTrigger value="appearance" className="gap-1.5 text-xs py-2">
-                  <Palette size={14} /> <span>Display & Theme</span>
+
+                <TabsTrigger value="appearance" className="flex-1 gap-1.5 text-xs py-2 px-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs transition-all font-medium">
+                  <Palette size={14} className="shrink-0 text-indigo-500" />
+                  <span className="truncate">Display</span>
+                  <span className="hidden md:inline text-[11px] opacity-70">& Theme</span>
                 </TabsTrigger>
-                <TabsTrigger value="security" className="gap-1.5 text-xs py-2">
-                  <Lock size={14} /> <span>Security & Devices</span>
+
+                <TabsTrigger value="security" className="flex-1 gap-1.5 text-xs py-2 px-2 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs transition-all font-medium">
+                  <Lock size={14} className="shrink-0 text-emerald-500" />
+                  <span className="truncate">Security</span>
+                  <span className="hidden md:inline text-[11px] opacity-70">& Devices</span>
                 </TabsTrigger>
               </TabsList>
             </div>
