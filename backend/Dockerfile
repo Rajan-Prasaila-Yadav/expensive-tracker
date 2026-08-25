@@ -17,10 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+COPY schema.prisma /app/schema.prisma
 COPY . /app/
 
-RUN python -m prisma generate --schema=prisma/schema.prisma
+RUN python -m prisma generate --schema=/app/schema.prisma
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "python -m prisma db push --schema=prisma/schema.prisma && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4"]
+CMD ["sh", "-c", "python -m prisma db push --schema=/app/schema.prisma && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4"]
