@@ -180,7 +180,7 @@ export default function AppLayout({ children }: Props) {
         </header>
 
         {/* Scrollable Page Viewport */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full pb-20 md:pb-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 max-w-full pb-28 md:pb-8">
           {children}
         </main>
       </div>

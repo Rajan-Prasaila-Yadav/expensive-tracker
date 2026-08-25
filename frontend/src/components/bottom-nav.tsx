@@ -15,7 +15,7 @@ const NAV = [
 
 export default function BottomNav() {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center border-t border-border/80 bg-card/95 backdrop-blur-lg px-1.5 py-1 safe-area-inset-bottom shadow-lg">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-border/80 bg-card/95 backdrop-blur-xl px-2 pt-2 pb-3 safe-area-inset-bottom shadow-2xl">
       {NAV.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}
@@ -23,7 +23,7 @@ export default function BottomNav() {
           end={to === "/"}
           className={({ isActive }) =>
             cn(
-              "flex-1 relative flex flex-col items-center justify-center py-1 gap-0.5 text-[11px] font-semibold transition-all duration-200 select-none",
+              "flex-1 relative flex flex-col items-center justify-center py-1.5 gap-1 text-[11px] font-semibold transition-all duration-200 select-none rounded-xl",
               isActive ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground active:scale-95"
             )
           }
@@ -33,7 +33,7 @@ export default function BottomNav() {
               {isActive && (
                 <motion.div
                   layoutId="bottom-nav-active-pill"
-                  className="absolute inset-0 bg-primary/10 rounded-xl"
+                  className="absolute inset-0 bg-primary/10 rounded-xl border border-primary/20"
                   transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}
@@ -42,9 +42,9 @@ export default function BottomNav() {
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
                 className="relative z-10"
               >
-                <Icon size={19} strokeWidth={isActive ? 2.5 : 2} />
+                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
               </motion.div>
-              <span className="relative z-10 leading-none">{label}</span>
+              <span className="relative z-10 text-[10px] leading-tight font-medium tracking-tight">{label}</span>
             </>
           )}
         </NavLink>
