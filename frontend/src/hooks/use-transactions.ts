@@ -9,11 +9,8 @@
  * On write: persist to the API first. A failed cloud request is never presented
  *           as a successful save, preventing device-specific phantom records.
  */
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
-  CATEGORIES as DEFAULT_CATEGORIES,
-  INCOME_SOURCES as DEFAULT_SOURCES,
-  PAYMENT_METHODS as DEFAULT_METHODS,
   type Transaction,
   type Category,
   type IncomeSource,
@@ -78,22 +75,21 @@ export interface TransactionStore {
   deletePaymentMethod: (id: string) => Promise<void>;
 }
 
-export function useTransactionStore(): TransactionStore {
+export function useTransactionStore(userId?: string): TransactionStore {
   // Initialize from cache for instant display
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
     loadCache<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, [])
   );
   const [categories, setCategories] = useState<Category[]>(() =>
-    loadCache<Category[]>(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
+    loadCache<Category[]>(STORAGE_KEYS.CATEGORIES, [])
   );
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>(() =>
-    loadCache<IncomeSource[]>(STORAGE_KEYS.SOURCES, DEFAULT_SOURCES)
+    loadCache<IncomeSource[]>(STORAGE_KEYS.SOURCES, [])
   );
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(() =>
-    loadCache<PaymentMethod[]>(STORAGE_KEYS.PAYMENT_METHODS, DEFAULT_METHODS)
+    loadCache<PaymentMethod[]>(STORAGE_KEYS.PAYMENT_METHODS, [])
   );
   const [loading, setLoading] = useState(true);
-  const hasFetchedRef = useRef(false);
 
   // Persist state changes to cache
   useEffect(() => { saveCache(STORAGE_KEYS.TRANSACTIONS, transactions); }, [transactions]);
@@ -129,37 +125,35 @@ export function useTransactionStore(): TransactionStore {
 
       if (catsRes.status === "fulfilled") {
         const data = Array.isArray(catsRes.value.data) ? catsRes.value.data : [];
-        if (data.length > 0) {
-          setCategories(data);
-          saveCache(STORAGE_KEYS.CATEGORIES, data);
-        }
+        setCategories(data);
+        saveCache(STORAGE_KEYS.CATEGORIES, data);
       }
       if (srcsRes.status === "fulfilled") {
         const data = Array.isArray(srcsRes.value.data) ? srcsRes.value.data : [];
-        if (data.length > 0) {
-          setIncomeSources(data);
-          saveCache(STORAGE_KEYS.SOURCES, data);
-        }
+        setIncomeSources(data);
+        saveCache(STORAGE_KEYS.SOURCES, data);
       }
       if (pmsRes.status === "fulfilled") {
         const data = Array.isArray(pmsRes.value.data) ? pmsRes.value.data : [];
-        if (data.length > 0) {
-          setPaymentMethods(data);
-          saveCache(STORAGE_KEYS.PAYMENT_METHODS, data);
-        }
+        setPaymentMethods(data);
+        saveCache(STORAGE_KEYS.PAYMENT_METHODS, data);
       }
     } catch (err) {
       console.warn("[API] Failed to fetch metadata, using cache:", err);
     }
   }, []);
 
-  // Fetch from API on mount (once)
+  // Fetch only after authentication, and again whenever a different account
+  // signs in. This makes the database—not a phone's localStorage—the source
+  // of every visible record.
   useEffect(() => {
-    if (hasFetchedRef.current) return;
-    hasFetchedRef.current = true;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     fetchTransactions();
     fetchAllMetadata();
-  }, [fetchTransactions, fetchAllMetadata]);
+  }, [userId, fetchTransactions, fetchAllMetadata]);
 
   // ─── WRITE: Optimistic update + API persist ───
 
@@ -229,15 +223,11 @@ export function useTransactionStore(): TransactionStore {
         throw err;
       }
     } else {
-      const tempId = `cat-${Date.now()}`;
-      const newCat: Category = { id: tempId, ...data };
+      const newCat: Category = { id: "", ...data };
       try {
         const res = await apiClient.post("/categories/", data);
         newCat.id = res.data.id;
         setCategories((prev) => [...prev, newCat]);
-        if (res.data?.id) {
-          setCategories((prev) => prev.map((c) => (c.id === tempId ? { ...c, id: res.data.id } : c)));
-        }
         toast.success("Category created!");
       } catch (err) {
         console.error("[API] Failed to create category:", err);
@@ -273,15 +263,11 @@ export function useTransactionStore(): TransactionStore {
         throw err;
       }
     } else {
-      const tempId = `src-${Date.now()}`;
-      const newSrc: IncomeSource = { id: tempId, ...data };
+      const newSrc: IncomeSource = { id: "", ...data };
       try {
         const res = await apiClient.post("/income-sources/", data);
         newSrc.id = res.data.id;
         setIncomeSources((prev) => [...prev, newSrc]);
-        if (res.data?.id) {
-          setIncomeSources((prev) => prev.map((s) => (s.id === tempId ? { ...s, id: res.data.id } : s)));
-        }
         toast.success("Income source created!");
       } catch (err) {
         console.error("[API] Failed to create income source:", err);
@@ -317,15 +303,11 @@ export function useTransactionStore(): TransactionStore {
         throw err;
       }
     } else {
-      const tempId = `pm-${Date.now()}`;
-      const newPm: PaymentMethod = { id: tempId, ...data };
+      const newPm: PaymentMethod = { id: "", ...data };
       try {
         const res = await apiClient.post("/payment-methods/", data);
         newPm.id = res.data.id;
         setPaymentMethods((prev) => [...prev, newPm]);
-        if (res.data?.id) {
-          setPaymentMethods((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: res.data.id } : p)));
-        }
         toast.success("Payment method created!");
       } catch (err) {
         console.error("[API] Failed to create payment method:", err);
