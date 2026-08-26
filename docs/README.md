@@ -18,6 +18,7 @@ Welcome to the comprehensive technical documentation for **FinanceOS** (College 
 | **[08. Architecture](08-SYSTEM-ARCHITECTURE.md)** | **Full Stack System Architecture** | Flow diagrams, PostgreSQL relational schemas, and data pipelines. |
 | **[09. Interactions](09-ACTIONS-INTERACTIONS-CATALOG.md)** | **Actions & Modal Catalog** | Comprehensive catalog of CRUD dialogs, toasts, and confirmation prompts. |
 | **[10. Django Guide](10-DJANGO-POSTGRESQL-PRISMA-IMPLEMENTATION-GUIDE.md)** | **Backend Implementation Guide** | Django 5 setup, Prisma ORM synchronization, and security middleware. |
+| **[13. Complete Reference](13-COMPLETE-SYSTEM-REFERENCE.md)** | **Current System Reference** | Implemented routes, fields, CRUD actions, filters, data ownership, APIs, diagrams, deployment, and verification. |
 | **[11. API Contract](11-API-SPECIFICATION-CONTRACT.md)** | **REST API Specification** | Endpoints, HTTP methods, request payloads, and response structures. |
 | **[12. Settings & Security](12-SETTINGS-SECURITY-DEVICE-TRACKING.md)** | **Settings, Security & Device Tracking** | Active session monitoring, remote killswitch, and regional preferences. |
 
