@@ -1,1 +1,1 @@
-web: cd backend && python -m prisma generate && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+web: cd backend && python -m prisma generate && gunicorn -c gunicorn.conf.py config.wsgi:application
