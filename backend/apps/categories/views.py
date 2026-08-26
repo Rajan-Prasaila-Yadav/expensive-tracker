@@ -64,6 +64,10 @@ class CategoryDetailView(APIView):
 
     def put(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.category.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         d = request.data
         update_data = {}
         if 'name' in d: update_data['name'] = d['name'].strip()
@@ -85,6 +89,10 @@ class CategoryDetailView(APIView):
 
     def delete(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.category.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         db.category.delete(where={'id': pk})
         return Response({'message': 'Category deleted successfully'}, status=status.HTTP_200_OK)
 
@@ -151,6 +159,10 @@ class PaymentMethodDetailView(APIView):
 
     def put(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.paymentmethod.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Payment method not found"}, status=status.HTTP_404_NOT_FOUND)
         d = request.data
         update_data = {}
         if 'name' in d: update_data['name'] = d['name'].strip()
@@ -175,6 +187,10 @@ class PaymentMethodDetailView(APIView):
 
     def delete(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.paymentmethod.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Payment method not found"}, status=status.HTTP_404_NOT_FOUND)
         db.paymentmethod.delete(where={'id': pk})
         return Response({'message': 'Payment method deleted'}, status=status.HTTP_200_OK)
 
@@ -276,6 +292,10 @@ class IncomeSourceDetailView(APIView):
 
     def put(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.incomesource.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Income source not found"}, status=status.HTTP_404_NOT_FOUND)
         d = request.data
         update_data = {}
         if 'name' in d: update_data['name'] = d['name'].strip()
@@ -311,6 +331,10 @@ class IncomeSourceDetailView(APIView):
 
     def delete(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.incomesource.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Income source not found"}, status=status.HTTP_404_NOT_FOUND)
         try:
             db.incomesource.delete(where={'id': pk})
         except Exception:

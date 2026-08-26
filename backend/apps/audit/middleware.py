@@ -96,10 +96,6 @@ class AuditLoggingMiddleware:
                 db = get_prisma()
                 user_id = get_authenticated_user_id(request)
 
-                if not user_id:
-                    first_u = db.user.find_first()
-                    user_id = first_u.id if first_u else None
-
                 if user_id:
                     raw_ua = request.META.get('HTTP_USER_AGENT', '')
                     device_type, browser_name, os_name = parse_user_agent(raw_ua)

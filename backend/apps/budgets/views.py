@@ -61,6 +61,9 @@ class BudgetListCreateView(APIView):
             return Response({"error": "User required"}, status=status.HTTP_401_UNAUTHORIZED)
 
         d = request.data
+        category = db.category.find_unique(where={'id': d.get('categoryId')}) if d.get('categoryId') else None
+        if not category or category.userId != user_id:
+            return Response({"error": "A category belonging to your account is required"}, status=status.HTTP_400_BAD_REQUEST)
         start_d = datetime.strptime(d['startDate'], '%Y-%m-%d') if d.get('startDate') else datetime.now().replace(day=1)
         end_d = datetime.strptime(d['endDate'], '%Y-%m-%d') if d.get('endDate') else datetime.now().replace(day=28)
 
@@ -92,6 +95,10 @@ class BudgetDetailView(APIView):
 
     def put(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.budget.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Budget not found"}, status=status.HTTP_404_NOT_FOUND)
         d = request.data
         update_data = {}
         if 'limit' in d: update_data['limitAmount'] = Decimal(str(d['limit']))
@@ -104,5 +111,9 @@ class BudgetDetailView(APIView):
 
     def delete(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.budget.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Budget not found"}, status=status.HTTP_404_NOT_FOUND)
         db.budget.delete(where={'id': pk})
         return Response({'message': 'Budget deleted'}, status=status.HTTP_200_OK)

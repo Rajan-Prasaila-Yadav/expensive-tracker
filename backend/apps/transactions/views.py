@@ -106,10 +106,10 @@ class TransactionListCreateView(APIView):
         cat_id = d.get('categoryId') or d.get('sourceId')
         category = None
         if cat_id and cat_id != 'all':
-            category = db.category.find_first(where={'id': cat_id})
+            category = db.category.find_first(where={'id': cat_id, 'userId': user_id})
             if not category:
                 # Check incomesource table
-                inc_src = db.incomesource.find_first(where={'id': cat_id})
+                inc_src = db.incomesource.find_first(where={'id': cat_id, 'userId': user_id})
                 if inc_src:
                     try:
                         category = db.category.create(
@@ -123,7 +123,7 @@ class TransactionListCreateView(APIView):
                             }
                         )
                     except Exception:
-                        category = db.category.find_first(where={'id': inc_src.id})
+                        category = db.category.find_first(where={'id': inc_src.id, 'userId': user_id})
 
         if not category:
             tx_type = d.get('type', 'expense')
@@ -143,7 +143,7 @@ class TransactionListCreateView(APIView):
         pm_id = d.get('paymentMethodId')
         pm = None
         if pm_id and pm_id != 'all':
-            pm = db.paymentmethod.find_first(where={'id': pm_id})
+            pm = db.paymentmethod.find_first(where={'id': pm_id, 'userId': user_id})
         if not pm:
             pm = db.paymentmethod.find_first(where={'userId': user_id})
             if not pm:
@@ -194,11 +194,14 @@ class TransactionDetailView(APIView):
 
     def get(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        if not user_id:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
         tx = db.transaction.find_unique(
             where={'id': pk},
             include={'category': True, 'paymentMethod': True}
         )
-        if not tx:
+        if not tx or tx.userId != user_id:
             return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
 
         return Response({
@@ -229,6 +232,12 @@ class TransactionDetailView(APIView):
 
     def put(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        if not user_id:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
+        existing = db.transaction.find_unique(where={'id': pk})
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
         d = request.data
         update_data = {}
         if 'title' in d: update_data['title'] = d['title']
@@ -251,6 +260,10 @@ class TransactionDetailView(APIView):
 
     def delete(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.transaction.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
         db.transaction.delete(where={'id': pk})
         return Response({'message': 'Transaction deleted successfully'}, status=status.HTTP_200_OK)
 
@@ -260,8 +273,11 @@ class TransactionDuplicateView(APIView):
 
     def post(self, request, pk):
         db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        if not user_id:
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
         original = db.transaction.find_unique(where={'id': pk})
-        if not original:
+        if not original or original.userId != user_id:
             return Response({"error": "Transaction not found"}, status=status.HTTP_404_NOT_FOUND)
 
         duplicate = db.transaction.create(

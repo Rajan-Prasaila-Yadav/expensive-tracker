@@ -3,11 +3,11 @@
  * 
  * ARCHITECTURE:
  * - PRIMARY: Django REST API → PostgreSQL (Supabase) — the source of truth
- * - CACHE: localStorage — instant loads + offline fallback
+ * - CACHE: localStorage — display cache only; Django/PostgreSQL is the source of truth
  * 
  * On mount: Load from localStorage instantly, then fetch from API and overwrite.
- * On write: Optimistically update state + localStorage, then persist to API.
- *           If API fails, show error toast (data stays in localStorage as fallback).
+ * On write: persist to the API first. A failed cloud request is never presented
+ *           as a successful save, preventing device-specific phantom records.
  */
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
@@ -164,115 +164,98 @@ export function useTransactionStore(): TransactionStore {
   // ─── WRITE: Optimistic update + API persist ───
 
   const addTransaction = useCallback(async (data: NewTransaction): Promise<Transaction> => {
-    const tempId = makeTxId();
-    const optimisticTx: Transaction = { id: tempId, ...data };
-
-    // Optimistic: add to state + cache immediately
-    setTransactions((prev) => [optimisticTx, ...prev]);
-
     try {
       const res = await apiClient.post("/transactions/", data);
-      if (res.data?.id) {
-        setTransactions((prev) =>
-          prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t))
-        );
-        optimisticTx.id = res.data.id;
-      }
+      const saved: Transaction = { ...data, ...res.data, id: res.data.id };
+      setTransactions((prev) => [saved, ...prev]);
       toast.success("Transaction saved!");
+      return saved;
     } catch (err) {
       console.error("[API] Failed to save transaction:", err);
-      toast.error("Could not save to cloud. Stored locally.");
+      toast.error("Could not save transaction to the cloud. Please try again.");
+      throw err;
     }
-
-    return optimisticTx;
   }, []);
 
   const updateTransaction = useCallback(async (id: string, data: Partial<NewTransaction>) => {
-    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
     try {
       await apiClient.put(`/transactions/${id}/`, data);
+      setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
       toast.success("Transaction updated!");
     } catch (err) {
       console.error("[API] Failed to update transaction:", err);
-      toast.error("Could not update in cloud. Updated locally.");
+      toast.error("Could not update transaction in the cloud.");
+      throw err;
     }
   }, []);
 
   const deleteTransaction = useCallback(async (id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
     try {
       await apiClient.delete(`/transactions/${id}/`);
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
       toast.success("Transaction deleted!");
     } catch (err) {
       console.error("[API] Failed to delete transaction:", err);
-      toast.error("Could not delete from cloud. Removed locally.");
+      toast.error("Could not delete transaction from the cloud.");
+      throw err;
     }
   }, []);
 
   const duplicateTransaction = useCallback(async (tx: Transaction): Promise<Transaction> => {
-    const tempId = makeTxId();
-    const dupe: Transaction = {
-      ...tx,
-      id: tempId,
-      title: `${tx.title} (Copy)`,
-      date: format(new Date(), "yyyy-MM-dd"),
-      time: format(new Date(), "HH:mm"),
-    };
-    setTransactions((prev) => [dupe, ...prev]);
-
     try {
       const res = await apiClient.post(`/transactions/${tx.id}/duplicate/`);
-      if (res.data?.id) {
-        setTransactions((prev) =>
-          prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t))
-        );
-        dupe.id = res.data.id;
-      }
+      const dupe: Transaction = { ...tx, ...res.data, id: res.data.id, title: `${tx.title} (Copy)`, date: format(new Date(), "yyyy-MM-dd"), time: format(new Date(), "HH:mm") };
+      setTransactions((prev) => [dupe, ...prev]);
       toast.success("Transaction duplicated!");
+      return dupe;
     } catch (err) {
       console.error("[API] Failed to duplicate transaction:", err);
-      toast.error("Could not duplicate in cloud. Duplicated locally.");
+      toast.error("Could not duplicate transaction in the cloud.");
+      throw err;
     }
-    return dupe;
   }, []);
 
   // ─── CATEGORY CRUD ───
 
   const saveCategory = useCallback(async (data: Omit<Category, "id">, existing: Category | null) => {
     if (existing) {
-      setCategories((prev) => prev.map((c) => (c.id === existing.id ? { ...c, ...data } : c)));
       try {
         await apiClient.put(`/categories/${existing.id}/`, data);
+        setCategories((prev) => prev.map((c) => (c.id === existing.id ? { ...c, ...data } : c)));
         toast.success("Category updated!");
       } catch (err) {
         console.error("[API] Failed to update category:", err);
-        toast.error("Could not update in cloud. Updated locally.");
+        toast.error("Could not update category in the cloud.");
+        throw err;
       }
     } else {
       const tempId = `cat-${Date.now()}`;
       const newCat: Category = { id: tempId, ...data };
-      setCategories((prev) => [...prev, newCat]);
       try {
         const res = await apiClient.post("/categories/", data);
+        newCat.id = res.data.id;
+        setCategories((prev) => [...prev, newCat]);
         if (res.data?.id) {
           setCategories((prev) => prev.map((c) => (c.id === tempId ? { ...c, id: res.data.id } : c)));
         }
         toast.success("Category created!");
       } catch (err) {
         console.error("[API] Failed to create category:", err);
-        toast.error("Could not save to cloud. Created locally.");
+        toast.error("Could not create category in the cloud.");
+        throw err;
       }
     }
   }, []);
 
   const deleteCategory = useCallback(async (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
     try {
       await apiClient.delete(`/categories/${id}/`);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
       toast.success("Category deleted!");
     } catch (err) {
       console.error("[API] Failed to delete category:", err);
-      toast.error("Could not delete from cloud. Removed locally.");
+      toast.error("Could not delete category from the cloud.");
+      throw err;
     }
   }, []);
 
@@ -280,39 +263,43 @@ export function useTransactionStore(): TransactionStore {
 
   const saveIncomeSource = useCallback(async (data: Omit<IncomeSource, "id">, existing: IncomeSource | null) => {
     if (existing) {
-      setIncomeSources((prev) => prev.map((s) => (s.id === existing.id ? { ...s, ...data } : s)));
       try {
         await apiClient.put(`/income-sources/${existing.id}/`, data);
+        setIncomeSources((prev) => prev.map((s) => (s.id === existing.id ? { ...s, ...data } : s)));
         toast.success("Income source updated!");
       } catch (err) {
         console.error("[API] Failed to update income source:", err);
-        toast.error("Could not update in cloud. Updated locally.");
+        toast.error("Could not update income source in the cloud.");
+        throw err;
       }
     } else {
       const tempId = `src-${Date.now()}`;
       const newSrc: IncomeSource = { id: tempId, ...data };
-      setIncomeSources((prev) => [...prev, newSrc]);
       try {
         const res = await apiClient.post("/income-sources/", data);
+        newSrc.id = res.data.id;
+        setIncomeSources((prev) => [...prev, newSrc]);
         if (res.data?.id) {
           setIncomeSources((prev) => prev.map((s) => (s.id === tempId ? { ...s, id: res.data.id } : s)));
         }
         toast.success("Income source created!");
       } catch (err) {
         console.error("[API] Failed to create income source:", err);
-        toast.error("Could not save to cloud. Created locally.");
+        toast.error("Could not create income source in the cloud.");
+        throw err;
       }
     }
   }, []);
 
   const deleteIncomeSource = useCallback(async (id: string) => {
-    setIncomeSources((prev) => prev.filter((s) => s.id !== id));
     try {
       await apiClient.delete(`/income-sources/${id}/`);
+      setIncomeSources((prev) => prev.filter((s) => s.id !== id));
       toast.success("Income source deleted!");
     } catch (err) {
       console.error("[API] Failed to delete income source:", err);
-      toast.error("Could not delete from cloud. Removed locally.");
+      toast.error("Could not delete income source from the cloud.");
+      throw err;
     }
   }, []);
 
@@ -320,39 +307,43 @@ export function useTransactionStore(): TransactionStore {
 
   const savePaymentMethod = useCallback(async (data: Omit<PaymentMethod, "id">, existing: PaymentMethod | null) => {
     if (existing) {
-      setPaymentMethods((prev) => prev.map((p) => (p.id === existing.id ? { ...p, ...data } : p)));
       try {
         await apiClient.put(`/payment-methods/${existing.id}/`, data);
+        setPaymentMethods((prev) => prev.map((p) => (p.id === existing.id ? { ...p, ...data } : p)));
         toast.success("Payment method updated!");
       } catch (err) {
         console.error("[API] Failed to update payment method:", err);
-        toast.error("Could not update in cloud. Updated locally.");
+        toast.error("Could not update payment method in the cloud.");
+        throw err;
       }
     } else {
       const tempId = `pm-${Date.now()}`;
       const newPm: PaymentMethod = { id: tempId, ...data };
-      setPaymentMethods((prev) => [...prev, newPm]);
       try {
         const res = await apiClient.post("/payment-methods/", data);
+        newPm.id = res.data.id;
+        setPaymentMethods((prev) => [...prev, newPm]);
         if (res.data?.id) {
           setPaymentMethods((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: res.data.id } : p)));
         }
         toast.success("Payment method created!");
       } catch (err) {
         console.error("[API] Failed to create payment method:", err);
-        toast.error("Could not save to cloud. Created locally.");
+        toast.error("Could not create payment method in the cloud.");
+        throw err;
       }
     }
   }, []);
 
   const deletePaymentMethod = useCallback(async (id: string) => {
-    setPaymentMethods((prev) => prev.filter((p) => p.id !== id));
     try {
       await apiClient.delete(`/payment-methods/${id}/`);
+      setPaymentMethods((prev) => prev.filter((p) => p.id !== id));
       toast.success("Payment method deleted!");
     } catch (err) {
       console.error("[API] Failed to delete payment method:", err);
-      toast.error("Could not delete from cloud. Removed locally.");
+      toast.error("Could not delete payment method from the cloud.");
+      throw err;
     }
   }, []);
 

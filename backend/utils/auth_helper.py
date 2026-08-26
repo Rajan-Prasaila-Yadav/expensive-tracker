@@ -1,11 +1,10 @@
 from utils.prisma_client import get_prisma
-from django.contrib.auth.hashers import make_password
 
 def get_authenticated_user_id(request):
     """
-    Returns a guaranteed valid user ID present in the PostgreSQL database.
-    Verifies JWT token user ID or falls back to the primary database user.
-    Auto-creates the primary user if the database is empty.
+    Returns the ID represented by a valid JWT.  There is deliberately no
+    fallback user: requests without a token must never read or write another
+    account's records.
     """
     db = get_prisma()
     auth_header = request.META.get('HTTP_AUTHORIZATION', '')
@@ -21,20 +20,4 @@ def get_authenticated_user_id(request):
         except Exception:
             pass
 
-    # Fallback to existing primary user in PostgreSQL
-    user = db.user.find_first()
-    if not user:
-        try:
-            user = db.user.create(
-                data={
-                    'email': 'rajanprasaila@gmail.com',
-                    'name': 'Rajan Yadav',
-                    'passwordHash': make_password('Admin@123'),
-                    'currency': 'INR',
-                }
-            )
-            db.usersettings.create(data={'userId': user.id})
-        except Exception:
-            user = db.user.find_first()
-
-    return user.id if user else None
+    return None

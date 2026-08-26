@@ -6,7 +6,13 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
  * - In development (Vite dev server): API calls go to /api and Vite proxies them to localhost:8000
  * - In production (Vercel): API calls go directly to the Railway backend URL
  */
-const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
+// `/api` is only proxied by Vite during local development.  A deployed static
+// frontend has no such proxy, so it must call the deployed Django API.
+const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  import.meta.env.DEV
+    ? "/api"
+    : "https://expensive-tracker-backend-production.up.railway.app/api"
+);
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

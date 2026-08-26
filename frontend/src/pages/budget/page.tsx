@@ -99,49 +99,32 @@ export default function BudgetPage() {
 
   const handleSave = async (data: Omit<Budget, "id" | "spent" | "startDate" | "endDate">, existing: Budget | null) => {
     if (existing) {
-      setBudgets((prev) => {
-        const next = prev.map((b) => (b.id === existing.id ? { ...b, ...data } : b));
-        localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
       try {
         await apiClient.put(`/budgets/${existing.id}/`, data);
+        setBudgets((prev) => prev.map((b) => (b.id === existing.id ? { ...b, ...data } : b)));
         toast.success("Budget updated!");
       } catch (err) {
         console.error("[API] Failed to update budget:", err);
-        toast.error("Could not update in cloud. Updated locally.");
+        toast.error("Could not update budget in the cloud.");
       }
     } else {
       const now = new Date();
       const startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${lastDay}`;
-      const tempId = `budget-${Date.now()}`;
-
       const catSpent = transactions
         .filter((t: Transaction) => t.categoryId === data.categoryId && t.type === "expense")
         .reduce((s: number, t: Transaction) => s + t.amount, 0);
-      const newBudget: Budget = { id: tempId, spent: catSpent, startDate, endDate, ...data };
-
-      setBudgets((prev) => {
-        const next = [...prev, newBudget];
-        localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
+      const newBudget: Budget = { id: "", spent: catSpent, startDate, endDate, ...data };
 
       try {
         const res = await apiClient.post("/budgets/", { ...data, startDate, endDate });
-        if (res.data?.id) {
-          setBudgets((prev) => {
-            const next = prev.map((b) => (b.id === tempId ? { ...b, id: res.data.id } : b));
-            localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
-            return next;
-          });
-        }
+        newBudget.id = res.data.id;
+        setBudgets((prev) => [...prev, newBudget]);
         toast.success("Budget created!");
       } catch (err) {
         console.error("[API] Failed to create budget:", err);
-        toast.error("Could not save to cloud. Created locally.");
+        toast.error("Could not create budget in the cloud.");
       }
     }
   };
@@ -149,18 +132,14 @@ export default function BudgetPage() {
   const handleDelete = async () => {
     if (!deleting) return;
     const id = deleting.id;
-    setBudgets((prev) => {
-      const next = prev.filter((b) => b.id !== id);
-      localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-    setDeleting(null);
     try {
       await apiClient.delete(`/budgets/${id}/`);
+      setBudgets((prev) => prev.filter((b) => b.id !== id));
+      setDeleting(null);
       toast.success("Budget deleted!");
     } catch (err) {
       console.error("[API] Failed to delete budget:", err);
-      toast.error("Could not delete from cloud. Removed locally.");
+      toast.error("Could not delete budget from the cloud.");
     }
   };
 

@@ -53,6 +53,9 @@ class NotificationMarkReadView(APIView):
     def put(self, request, pk):
         db = get_prisma()
         user_id = get_authenticated_user_id(request)
+        existing = db.notification.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND)
         n = db.notification.update(
             where={'id': pk},
             data={'read': True}

@@ -79,19 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return userData;
     } catch (err) {
       console.error("Google user backend sync error:", err);
-      // Fallback local profile
-      const meta = sbUser.user_metadata || {};
-      const fallbackUser: UserProfile = {
-        id: sbUser.id,
-        email: sbUser.email || "",
-        name: meta.full_name || meta.name || "Google User",
-        avatar: meta.avatar_url || meta.picture,
-        currency: "INR",
-        joinedAt: new Date().toISOString().slice(0, 10),
-      };
-      setUser(fallbackUser);
-      localStorage.setItem("user", JSON.stringify(fallbackUser));
-      return fallbackUser;
+      throw err;
     }
   };
 
@@ -105,24 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     }
 
-    // 2. Listen to Supabase Auth State Changes (Google OAuth Callbacks)
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      setSession(currentSession);
-      setSupabaseUser(currentSession?.user || null);
-
-      if (event === "SIGNED_IN" && currentSession?.user) {
-        await syncGoogleUserWithBackend(currentSession.user);
-      } else if (event === "SIGNED_OUT") {
-        setUser(null);
-        localStorage.removeItem("user");
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-      }
-    });
-
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
+    return undefined;
   }, []);
 
   const signIn = async (email: string, password: string): Promise<boolean> => {
@@ -141,19 +112,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.success(`Welcome back, ${userData.name || "User"}!`);
       return true;
     } catch (err: any) {
-      // 2. Fallback to Supabase Auth
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password,
-        });
-        if (!error && data?.user) {
-          const profile = await syncGoogleUserWithBackend(data.user);
-          toast.success("Welcome back!");
-          return true;
-        }
-      } catch {}
-
       const msg = err.response?.data?.error || "Invalid email or password. Please check your credentials.";
       toast.error(msg);
       return false;
@@ -178,15 +136,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(userData);
       localStorage.setItem("user", JSON.stringify(userData));
-
-      // Also register in Supabase in background
-      try {
-        supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: { data: { name: cleanName, currency: "INR" } },
-        }).catch(() => {});
-      } catch {}
 
       toast.success("Account created successfully!");
       return true;
@@ -223,9 +172,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {}
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");

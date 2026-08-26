@@ -91,11 +91,7 @@ class RegisterView(APIView):
         pw_hash = hash_password(password)
 
         if existing:
-            # Update password and log in
-            user = db.user.update(
-                where={'id': existing.id},
-                data={'passwordHash': pw_hash, 'name': name or existing.name}
-            )
+            return Response({"error": "An account with this email already exists. Please sign in."}, status=status.HTTP_409_CONFLICT)
         else:
             user = db.user.create(
                 data={
@@ -222,13 +218,7 @@ class LoginView(APIView):
         db = get_prisma()
         user = db.user.find_unique(where={'email': email})
         if not user:
-            # Fallback to check primary user if demo
-            user = db.user.find_first()
-            if not user:
-                return Response(
-                    {"error": "Invalid email or password."},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
+            return Response({"error": "Invalid email or password."}, status=status.HTTP_401_UNAUTHORIZED)
 
         if user.passwordHash and not check_password(password, user.passwordHash):
             return Response(
@@ -418,11 +408,8 @@ class ProfileView(APIView):
         db = get_prisma()
 
         if not user_id:
-            user = db.user.find_first()
-            if not user:
-                return Response({"error": "No user found."}, status=status.HTTP_404_NOT_FOUND)
-        else:
-            user = db.user.find_unique(where={'id': user_id})
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+        user = db.user.find_unique(where={'id': user_id})
 
         if not user:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -459,10 +446,7 @@ class ProfileView(APIView):
         db = get_prisma()
 
         if not user_id:
-            user = db.user.find_first()
-            if not user:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-            user_id = user.id
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
         data = request.data
         update_data = {}
@@ -500,11 +484,7 @@ class SettingsView(APIView):
         user_id = get_authenticated_user_id(request)
         db = get_prisma()
         if not user_id:
-            first_user = db.user.find_first()
-            if first_user:
-                user_id = first_user.id
-            else:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
 
         data = request.data
         settings_data = {
@@ -538,12 +518,8 @@ class ChangePasswordView(APIView):
         user_id = get_authenticated_user_id(request)
         db = get_prisma()
         if not user_id:
-            user = db.user.find_first()
-            if not user:
-                return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
-            user_id = user.id
-        else:
-            user = db.user.find_unique(where={'id': user_id})
+            return Response({"error": "Authentication required."}, status=status.HTTP_401_UNAUTHORIZED)
+        user = db.user.find_unique(where={'id': user_id})
 
         d = request.data
         current_pw = d.get('currentPassword', '')
