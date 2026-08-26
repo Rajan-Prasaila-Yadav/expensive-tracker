@@ -4,11 +4,18 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv(os.path.join(BASE_DIR, '.env'))
-except ImportError:
-    pass
+# Load .env file using pure stdlib (no third-party dependency needed)
+_env_path = os.path.join(BASE_DIR, '.env')
+if os.path.isfile(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _key, _, _val = _line.partition('=')
+                _key = _key.strip()
+                _val = _val.strip().strip('"').strip("'")
+                if _key and _key not in os.environ:
+                    os.environ[_key] = _val
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-expenses-tracker-default-key-2026')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
