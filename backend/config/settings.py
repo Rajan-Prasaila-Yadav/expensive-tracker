@@ -19,7 +19,7 @@ if os.path.isfile(_env_path):
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-expenses-tracker-default-key-2026')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0,expensive-tracker-backend-production.up.railway.app').split(',') if host.strip()]
+ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -131,17 +131,9 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# CORS Configuration — Allow both production and development origins
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        'CORS_ALLOWED_ORIGINS',
-        'http://localhost:5173,http://127.0.0.1:5173,https://expensive-tracker-chi-three.vercel.app'
-    ).split(',')
-    if origin.strip()
-]
+# CORS Configuration — Fully open for all devices and frontend environments
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = DEBUG
 
 # Allow all common headers for cross-origin requests
 CORS_ALLOW_HEADERS = [
