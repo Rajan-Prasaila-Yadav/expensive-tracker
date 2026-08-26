@@ -93,7 +93,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     }
 
-    return undefined;
+    // The OAuth redirect reloads the application.  Supabase restores that
+    // session here; we then exchange the Google identity for the app's Django
+    // JWT and user record.  Without this listener Google succeeds but the app
+    // never becomes signed in.
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      setSession(currentSession);
+      setSupabaseUser(currentSession?.user ?? null);
+
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && currentSession?.user) {
+        void syncGoogleUserWithBackend(currentSession.user).catch(() => {
+          toast.error("Google sign-in completed, but the account could not be connected to the server.");
+        });
+      }
+
+      if (event === "SIGNED_OUT") {
+        localStorage.removeItem("user");
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        setUser(null);
+      }
+    });
+
+    return () => authListener.subscription.unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string): Promise<boolean> => {
@@ -172,6 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
