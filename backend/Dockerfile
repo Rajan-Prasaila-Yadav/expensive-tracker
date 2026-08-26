@@ -22,6 +22,9 @@ COPY . /app/
 
 RUN python -m prisma generate --schema=/app/schema.prisma
 
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 EXPOSE 8080
 
-CMD ["sh", "-c", "python -m prisma db push --schema=/app/schema.prisma && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4"]
+CMD ["/bin/sh", "/app/start.sh"]
