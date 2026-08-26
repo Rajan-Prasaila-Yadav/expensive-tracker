@@ -51,15 +51,16 @@ export default function BudgetPage() {
     }
   }, [budgets]);
 
-  // Fetch budgets from Django REST API on mount
+  // Fetch budgets from Django REST API — overwrites cache with server data
   const fetchBudgets = useCallback(async () => {
     try {
       const res = await apiClient.get("/budgets/");
-      if (Array.isArray(res.data) && res.data.length > 0) {
+      if (Array.isArray(res.data)) {
         setBudgets(res.data);
+        localStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(res.data));
       }
-    } catch {
-      // Retain local state
+    } catch (err) {
+      console.warn("[API] Failed to fetch budgets, using cache:", err);
     }
   }, []);
 
@@ -105,9 +106,10 @@ export default function BudgetPage() {
       });
       try {
         await apiClient.put(`/budgets/${existing.id}/`, data);
-        toast.success("Budget updated successfully!");
-      } catch {
-        toast.success("Budget updated locally!");
+        toast.success("Budget updated!");
+      } catch (err) {
+        console.error("[API] Failed to update budget:", err);
+        toast.error("Could not update in cloud. Updated locally.");
       }
     } else {
       const now = new Date();
@@ -136,9 +138,10 @@ export default function BudgetPage() {
             return next;
           });
         }
-        toast.success("Budget created successfully!");
-      } catch {
-        toast.success("Budget recorded locally!");
+        toast.success("Budget created!");
+      } catch (err) {
+        console.error("[API] Failed to create budget:", err);
+        toast.error("Could not save to cloud. Created locally.");
       }
     }
   };
@@ -154,9 +157,10 @@ export default function BudgetPage() {
     setDeleting(null);
     try {
       await apiClient.delete(`/budgets/${id}/`);
-      toast.success("Budget deleted successfully!");
-    } catch {
-      toast.success("Budget removed locally!");
+      toast.success("Budget deleted!");
+    } catch (err) {
+      console.error("[API] Failed to delete budget:", err);
+      toast.error("Could not delete from cloud. Removed locally.");
     }
   };
 

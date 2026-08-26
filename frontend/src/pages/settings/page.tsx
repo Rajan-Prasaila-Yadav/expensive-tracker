@@ -149,10 +149,10 @@ export default function SettingsPage() {
       const payload = { name, phone, currency, language, timezone, dateFormat };
       await apiClient.put("/auth/profile/", payload);
       updateUser(payload);
-      toast.success("Profile & regional preferences saved to database!");
+      toast.success("Profile saved!");
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to save profile to database. Please verify connection.");
+      console.error("[API] Failed to save profile:", err);
+      toast.error("Could not save profile to cloud. Please check connection.");
     } finally {
       setSavingProfile(false);
     }
@@ -167,10 +167,10 @@ export default function SettingsPage() {
         animations,
         theme,
       });
-      toast.success("Notification and display settings saved to database!");
+      toast.success("Settings saved!");
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to save settings to database. Please verify connection.");
+      console.error("[API] Failed to save settings:", err);
+      toast.error("Could not save settings to cloud. Please check connection.");
     }
   };
 

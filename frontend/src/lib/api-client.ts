@@ -1,6 +1,11 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
-// Base API URL pointing to Django backend via Vite proxy or direct URL
+/**
+ * API Client for Django REST Backend.
+ * 
+ * - In development (Vite dev server): API calls go to /api and Vite proxies them to localhost:8000
+ * - In production (Vercel): API calls go directly to the Railway backend URL
+ */
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 export const apiClient = axios.create({
@@ -8,7 +13,8 @@ export const apiClient = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
+  timeout: 20000,
+  withCredentials: false,
 });
 
 // Request Interceptor: Attach JWT Token from localStorage if available

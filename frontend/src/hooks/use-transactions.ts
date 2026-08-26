@@ -1,7 +1,15 @@
 /**
- * Global transaction and metadata store connected to Django REST API, PostgreSQL database & resilient localStorage cache.
+ * Global transaction and metadata store.
+ * 
+ * ARCHITECTURE:
+ * - PRIMARY: Django REST API → PostgreSQL (Supabase) — the source of truth
+ * - CACHE: localStorage — instant loads + offline fallback
+ * 
+ * On mount: Load from localStorage instantly, then fetch from API and overwrite.
+ * On write: Optimistically update state + localStorage, then persist to API.
+ *           If API fails, show error toast (data stays in localStorage as fallback).
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   CATEGORIES as DEFAULT_CATEGORIES,
   INCOME_SOURCES as DEFAULT_SOURCES,
@@ -22,7 +30,7 @@ const STORAGE_KEYS = {
   PAYMENT_METHODS: "financeos_payment_methods_v1",
 };
 
-function loadStorage<T>(key: string, fallback: T): T {
+function loadCache<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
     if (raw) {
@@ -31,16 +39,16 @@ function loadStorage<T>(key: string, fallback: T): T {
       if (parsed && !Array.isArray(parsed)) return parsed as T;
     }
   } catch (e) {
-    console.warn(`Failed to parse ${key} from storage:`, e);
+    console.warn(`[Cache] Failed to parse ${key}:`, e);
   }
   return fallback;
 }
 
-function saveStorage<T>(key: string, data: T) {
+function saveCache<T>(key: string, data: T) {
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
-    console.warn(`Failed to save ${key} to storage:`, e);
+    console.warn(`[Cache] Failed to save ${key}:`, e);
   }
 }
 
@@ -71,53 +79,46 @@ export interface TransactionStore {
 }
 
 export function useTransactionStore(): TransactionStore {
+  // Initialize from cache for instant display
   const [transactions, setTransactions] = useState<Transaction[]>(() =>
-    loadStorage<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, [])
+    loadCache<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, [])
   );
   const [categories, setCategories] = useState<Category[]>(() =>
-    loadStorage<Category[]>(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
+    loadCache<Category[]>(STORAGE_KEYS.CATEGORIES, DEFAULT_CATEGORIES)
   );
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>(() =>
-    loadStorage<IncomeSource[]>(STORAGE_KEYS.SOURCES, DEFAULT_SOURCES)
+    loadCache<IncomeSource[]>(STORAGE_KEYS.SOURCES, DEFAULT_SOURCES)
   );
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>(() =>
-    loadStorage<PaymentMethod[]>(STORAGE_KEYS.PAYMENT_METHODS, DEFAULT_METHODS)
+    loadCache<PaymentMethod[]>(STORAGE_KEYS.PAYMENT_METHODS, DEFAULT_METHODS)
   );
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
 
-  // Sync state changes to localStorage
-  useEffect(() => {
-    saveStorage(STORAGE_KEYS.TRANSACTIONS, transactions);
-  }, [transactions]);
+  // Persist state changes to cache
+  useEffect(() => { saveCache(STORAGE_KEYS.TRANSACTIONS, transactions); }, [transactions]);
+  useEffect(() => { saveCache(STORAGE_KEYS.CATEGORIES, categories); }, [categories]);
+  useEffect(() => { saveCache(STORAGE_KEYS.SOURCES, incomeSources); }, [incomeSources]);
+  useEffect(() => { saveCache(STORAGE_KEYS.PAYMENT_METHODS, paymentMethods); }, [paymentMethods]);
 
-  useEffect(() => {
-    saveStorage(STORAGE_KEYS.CATEGORIES, categories);
-  }, [categories]);
+  // ─── FETCH: API-first, overwrite cache with server data ───
 
-  useEffect(() => {
-    saveStorage(STORAGE_KEYS.SOURCES, incomeSources);
-  }, [incomeSources]);
-
-  useEffect(() => {
-    saveStorage(STORAGE_KEYS.PAYMENT_METHODS, paymentMethods);
-  }, [paymentMethods]);
-
-  // Fetch live transactions from Django REST API
   const fetchTransactions = useCallback(async () => {
     try {
       setLoading(true);
       const res = await apiClient.get("/transactions/");
-      if (res.data?.results && Array.isArray(res.data.results) && res.data.results.length > 0) {
-        setTransactions(res.data.results);
+      const data = res.data?.results ?? res.data;
+      if (Array.isArray(data)) {
+        setTransactions(data);
+        saveCache(STORAGE_KEYS.TRANSACTIONS, data);
       }
-    } catch {
-      // Retain local state
+    } catch (err) {
+      console.warn("[API] Failed to fetch transactions, using cache:", err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Fetch live categories, sources, and payment methods
   const fetchAllMetadata = useCallback(async () => {
     try {
       const [catsRes, srcsRes, pmsRes] = await Promise.allSettled([
@@ -126,78 +127,85 @@ export function useTransactionStore(): TransactionStore {
         apiClient.get("/payment-methods/"),
       ]);
 
-      if (catsRes.status === "fulfilled" && Array.isArray(catsRes.value.data) && catsRes.value.data.length > 0) {
-        setCategories(catsRes.value.data);
+      if (catsRes.status === "fulfilled") {
+        const data = Array.isArray(catsRes.value.data) ? catsRes.value.data : [];
+        if (data.length > 0) {
+          setCategories(data);
+          saveCache(STORAGE_KEYS.CATEGORIES, data);
+        }
       }
-      if (srcsRes.status === "fulfilled" && Array.isArray(srcsRes.value.data) && srcsRes.value.data.length > 0) {
-        setIncomeSources(srcsRes.value.data);
+      if (srcsRes.status === "fulfilled") {
+        const data = Array.isArray(srcsRes.value.data) ? srcsRes.value.data : [];
+        if (data.length > 0) {
+          setIncomeSources(data);
+          saveCache(STORAGE_KEYS.SOURCES, data);
+        }
       }
-      if (pmsRes.status === "fulfilled" && Array.isArray(pmsRes.value.data) && pmsRes.value.data.length > 0) {
-        setPaymentMethods(pmsRes.value.data);
+      if (pmsRes.status === "fulfilled") {
+        const data = Array.isArray(pmsRes.value.data) ? pmsRes.value.data : [];
+        if (data.length > 0) {
+          setPaymentMethods(data);
+          saveCache(STORAGE_KEYS.PAYMENT_METHODS, data);
+        }
       }
-    } catch {
-      // Retain local state
+    } catch (err) {
+      console.warn("[API] Failed to fetch metadata, using cache:", err);
     }
   }, []);
 
+  // Fetch from API on mount (once)
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     fetchTransactions();
     fetchAllMetadata();
   }, [fetchTransactions, fetchAllMetadata]);
 
-  // Transaction Actions
+  // ─── WRITE: Optimistic update + API persist ───
+
   const addTransaction = useCallback(async (data: NewTransaction): Promise<Transaction> => {
     const tempId = makeTxId();
     const optimisticTx: Transaction = { id: tempId, ...data };
-    setTransactions((prev) => {
-      const next = [optimisticTx, ...prev];
-      saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-      return next;
-    });
+
+    // Optimistic: add to state + cache immediately
+    setTransactions((prev) => [optimisticTx, ...prev]);
 
     try {
       const res = await apiClient.post("/transactions/", data);
       if (res.data?.id) {
-        setTransactions((prev) => {
-          const next = prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t));
-          saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-          return next;
-        });
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t))
+        );
         optimisticTx.id = res.data.id;
       }
-      toast.success("Transaction recorded successfully!");
-    } catch {
-      toast.success("Transaction recorded locally and queued for cloud sync!");
+      toast.success("Transaction saved!");
+    } catch (err) {
+      console.error("[API] Failed to save transaction:", err);
+      toast.error("Could not save to cloud. Stored locally.");
     }
 
     return optimisticTx;
   }, []);
 
   const updateTransaction = useCallback(async (id: string, data: Partial<NewTransaction>) => {
-    setTransactions((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, ...data } : t));
-      saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-      return next;
-    });
+    setTransactions((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
     try {
       await apiClient.put(`/transactions/${id}/`, data);
-      toast.success("Transaction updated successfully!");
-    } catch {
-      toast.success("Transaction updated locally!");
+      toast.success("Transaction updated!");
+    } catch (err) {
+      console.error("[API] Failed to update transaction:", err);
+      toast.error("Could not update in cloud. Updated locally.");
     }
   }, []);
 
   const deleteTransaction = useCallback(async (id: string) => {
-    setTransactions((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-      return next;
-    });
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
     try {
       await apiClient.delete(`/transactions/${id}/`);
-      toast.success("Transaction deleted successfully!");
-    } catch {
-      toast.success("Transaction removed locally!");
+      toast.success("Transaction deleted!");
+    } catch (err) {
+      console.error("[API] Failed to delete transaction:", err);
+      toast.error("Could not delete from cloud. Removed locally.");
     }
   }, []);
 
@@ -210,182 +218,141 @@ export function useTransactionStore(): TransactionStore {
       date: format(new Date(), "yyyy-MM-dd"),
       time: format(new Date(), "HH:mm"),
     };
-    setTransactions((prev) => {
-      const next = [dupe, ...prev];
-      saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-      return next;
-    });
+    setTransactions((prev) => [dupe, ...prev]);
 
     try {
       const res = await apiClient.post(`/transactions/${tx.id}/duplicate/`);
       if (res.data?.id) {
-        setTransactions((prev) => {
-          const next = prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t));
-          saveStorage(STORAGE_KEYS.TRANSACTIONS, next);
-          return next;
-        });
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === tempId ? { ...t, id: res.data.id } : t))
+        );
         dupe.id = res.data.id;
       }
-      toast.success("Transaction duplicated successfully!");
-    } catch {
-      toast.success("Transaction duplicated locally!");
+      toast.success("Transaction duplicated!");
+    } catch (err) {
+      console.error("[API] Failed to duplicate transaction:", err);
+      toast.error("Could not duplicate in cloud. Duplicated locally.");
     }
     return dupe;
   }, []);
 
-  // Category Actions
+  // ─── CATEGORY CRUD ───
+
   const saveCategory = useCallback(async (data: Omit<Category, "id">, existing: Category | null) => {
     if (existing) {
-      setCategories((prev) => {
-        const next = prev.map((c) => (c.id === existing.id ? { ...c, ...data } : c));
-        saveStorage(STORAGE_KEYS.CATEGORIES, next);
-        return next;
-      });
+      setCategories((prev) => prev.map((c) => (c.id === existing.id ? { ...c, ...data } : c)));
       try {
         await apiClient.put(`/categories/${existing.id}/`, data);
-        toast.success("Category updated successfully!");
-      } catch {
-        toast.success("Category updated locally!");
+        toast.success("Category updated!");
+      } catch (err) {
+        console.error("[API] Failed to update category:", err);
+        toast.error("Could not update in cloud. Updated locally.");
       }
     } else {
       const tempId = `cat-${Date.now()}`;
       const newCat: Category = { id: tempId, ...data };
-      setCategories((prev) => {
-        const next = [...prev, newCat];
-        saveStorage(STORAGE_KEYS.CATEGORIES, next);
-        return next;
-      });
+      setCategories((prev) => [...prev, newCat]);
       try {
         const res = await apiClient.post("/categories/", data);
         if (res.data?.id) {
-          setCategories((prev) => {
-            const next = prev.map((c) => (c.id === tempId ? { ...c, id: res.data.id } : c));
-            saveStorage(STORAGE_KEYS.CATEGORIES, next);
-            return next;
-          });
+          setCategories((prev) => prev.map((c) => (c.id === tempId ? { ...c, id: res.data.id } : c)));
         }
-        toast.success("Category created successfully!");
-      } catch {
-        toast.success("Category created locally!");
+        toast.success("Category created!");
+      } catch (err) {
+        console.error("[API] Failed to create category:", err);
+        toast.error("Could not save to cloud. Created locally.");
       }
     }
   }, []);
 
   const deleteCategory = useCallback(async (id: string) => {
-    setCategories((prev) => {
-      const next = prev.filter((c) => c.id !== id);
-      saveStorage(STORAGE_KEYS.CATEGORIES, next);
-      return next;
-    });
+    setCategories((prev) => prev.filter((c) => c.id !== id));
     try {
       await apiClient.delete(`/categories/${id}/`);
-      toast.success("Category deleted successfully!");
-    } catch {
-      toast.success("Category removed locally!");
+      toast.success("Category deleted!");
+    } catch (err) {
+      console.error("[API] Failed to delete category:", err);
+      toast.error("Could not delete from cloud. Removed locally.");
     }
   }, []);
 
-  // Income Source Actions
+  // ─── INCOME SOURCE CRUD ───
+
   const saveIncomeSource = useCallback(async (data: Omit<IncomeSource, "id">, existing: IncomeSource | null) => {
     if (existing) {
-      setIncomeSources((prev) => {
-        const next = prev.map((s) => (s.id === existing.id ? { ...s, ...data } : s));
-        saveStorage(STORAGE_KEYS.SOURCES, next);
-        return next;
-      });
+      setIncomeSources((prev) => prev.map((s) => (s.id === existing.id ? { ...s, ...data } : s)));
       try {
         await apiClient.put(`/income-sources/${existing.id}/`, data);
-        toast.success("Income stream updated successfully!");
-      } catch {
-        toast.success("Income stream updated locally!");
+        toast.success("Income source updated!");
+      } catch (err) {
+        console.error("[API] Failed to update income source:", err);
+        toast.error("Could not update in cloud. Updated locally.");
       }
     } else {
       const tempId = `src-${Date.now()}`;
       const newSrc: IncomeSource = { id: tempId, ...data };
-      setIncomeSources((prev) => {
-        const next = [...prev, newSrc];
-        saveStorage(STORAGE_KEYS.SOURCES, next);
-        return next;
-      });
+      setIncomeSources((prev) => [...prev, newSrc]);
       try {
         const res = await apiClient.post("/income-sources/", data);
         if (res.data?.id) {
-          setIncomeSources((prev) => {
-            const next = prev.map((s) => (s.id === tempId ? { ...s, id: res.data.id } : s));
-            saveStorage(STORAGE_KEYS.SOURCES, next);
-            return next;
-          });
+          setIncomeSources((prev) => prev.map((s) => (s.id === tempId ? { ...s, id: res.data.id } : s)));
         }
-        toast.success("Income stream created successfully!");
-      } catch {
-        toast.success("Income stream created locally!");
+        toast.success("Income source created!");
+      } catch (err) {
+        console.error("[API] Failed to create income source:", err);
+        toast.error("Could not save to cloud. Created locally.");
       }
     }
   }, []);
 
   const deleteIncomeSource = useCallback(async (id: string) => {
-    setIncomeSources((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      saveStorage(STORAGE_KEYS.SOURCES, next);
-      return next;
-    });
+    setIncomeSources((prev) => prev.filter((s) => s.id !== id));
     try {
       await apiClient.delete(`/income-sources/${id}/`);
-      toast.success("Income stream deleted successfully!");
-    } catch {
-      toast.success("Income stream removed locally!");
+      toast.success("Income source deleted!");
+    } catch (err) {
+      console.error("[API] Failed to delete income source:", err);
+      toast.error("Could not delete from cloud. Removed locally.");
     }
   }, []);
 
-  // Payment Method Actions
+  // ─── PAYMENT METHOD CRUD ───
+
   const savePaymentMethod = useCallback(async (data: Omit<PaymentMethod, "id">, existing: PaymentMethod | null) => {
     if (existing) {
-      setPaymentMethods((prev) => {
-        const next = prev.map((p) => (p.id === existing.id ? { ...p, ...data } : p));
-        saveStorage(STORAGE_KEYS.PAYMENT_METHODS, next);
-        return next;
-      });
+      setPaymentMethods((prev) => prev.map((p) => (p.id === existing.id ? { ...p, ...data } : p)));
       try {
         await apiClient.put(`/payment-methods/${existing.id}/`, data);
-        toast.success("Payment account updated successfully!");
-      } catch {
-        toast.success("Payment account updated locally!");
+        toast.success("Payment method updated!");
+      } catch (err) {
+        console.error("[API] Failed to update payment method:", err);
+        toast.error("Could not update in cloud. Updated locally.");
       }
     } else {
       const tempId = `pm-${Date.now()}`;
       const newPm: PaymentMethod = { id: tempId, ...data };
-      setPaymentMethods((prev) => {
-        const next = [...prev, newPm];
-        saveStorage(STORAGE_KEYS.PAYMENT_METHODS, next);
-        return next;
-      });
+      setPaymentMethods((prev) => [...prev, newPm]);
       try {
         const res = await apiClient.post("/payment-methods/", data);
         if (res.data?.id) {
-          setPaymentMethods((prev) => {
-            const next = prev.map((p) => (p.id === tempId ? { ...p, id: res.data.id } : p));
-            saveStorage(STORAGE_KEYS.PAYMENT_METHODS, next);
-            return next;
-          });
+          setPaymentMethods((prev) => prev.map((p) => (p.id === tempId ? { ...p, id: res.data.id } : p)));
         }
-        toast.success("Payment account created successfully!");
-      } catch {
-        toast.success("Payment account created locally!");
+        toast.success("Payment method created!");
+      } catch (err) {
+        console.error("[API] Failed to create payment method:", err);
+        toast.error("Could not save to cloud. Created locally.");
       }
     }
   }, []);
 
   const deletePaymentMethod = useCallback(async (id: string) => {
-    setPaymentMethods((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      saveStorage(STORAGE_KEYS.PAYMENT_METHODS, next);
-      return next;
-    });
+    setPaymentMethods((prev) => prev.filter((p) => p.id !== id));
     try {
       await apiClient.delete(`/payment-methods/${id}/`);
-      toast.success("Payment account deleted successfully!");
-    } catch {
-      toast.success("Payment account removed locally!");
+      toast.success("Payment method deleted!");
+    } catch (err) {
+      console.error("[API] Failed to delete payment method:", err);
+      toast.error("Could not delete from cloud. Removed locally.");
     }
   }, []);
 
