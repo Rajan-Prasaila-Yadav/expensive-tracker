@@ -44,10 +44,10 @@ class NotificationListCreateView(APIView):
                 'read': False,
             }
         )
-        return Response({'id': n.id, 'title': n.title, 'message': n.message, 'type': n.type, 'read': n.read}, status=status.HTTP_201_CREATED)
+        return Response({'id': n.id, 'title': n.title, 'message': n.message, 'type': n.type, 'read': n.read, 'timestamp': n.timestamp.isoformat()}, status=status.HTTP_201_CREATED)
 
 
-class NotificationMarkReadView(APIView):
+class NotificationDetailView(APIView):
     permission_classes = [AllowAny]
 
     def put(self, request, pk):
@@ -62,6 +62,15 @@ class NotificationMarkReadView(APIView):
         )
         return Response({'id': n.id, 'read': n.read})
 
+    def delete(self, request, pk):
+        db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        existing = db.notification.find_unique(where={'id': pk}) if user_id else None
+        if not existing or existing.userId != user_id:
+            return Response({"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND)
+        db.notification.delete(where={'id': pk})
+        return Response({'message': 'Notification dismissed'})
+
 
 class NotificationMarkAllReadView(APIView):
     permission_classes = [AllowAny]
@@ -75,3 +84,14 @@ class NotificationMarkAllReadView(APIView):
                 data={'read': True}
             )
         return Response({'message': 'All notifications marked as read'})
+
+
+class NotificationClearAllView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        db = get_prisma()
+        user_id = get_authenticated_user_id(request)
+        if user_id:
+            db.notification.delete_many(where={'userId': user_id})
+        return Response({'message': 'All notifications cleared'})

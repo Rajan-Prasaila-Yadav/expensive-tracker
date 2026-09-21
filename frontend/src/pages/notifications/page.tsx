@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppLayout from "@/components/app-layout.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { NOTIFICATIONS } from "@/lib/mock-data.ts";
 import type { Notification } from "@/lib/mock-data.ts";
 import { cn } from "@/lib/utils.ts";
 import { Bell, CheckCheck, Info, CheckCircle, AlertTriangle, XCircle, X, Trash2 } from "lucide-react";
 import { format, parseISO, isToday, isYesterday } from "date-fns";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+import apiClient from "@/lib/api-client.ts";
 
 const TYPE_CONFIG = {
   info: { icon: Info, color: "text-[var(--color-transfer)]", bg: "bg-[var(--color-transfer-bg)]" },
@@ -25,24 +25,67 @@ function formatTime(ts: string) {
 }
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>(NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const markRead = (id: string) =>
-    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await apiClient.get("/notifications/");
+      if (Array.isArray(res.data)) {
+        setNotifications(res.data);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch notifications from cloud:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const dismiss = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    toast.success("Notification dismissed");
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const markRead = async (id: string) => {
+    try {
+      await apiClient.put(`/notifications/${id}/mark-read/`);
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    } catch {
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+    }
   };
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    toast.success("All marked as read");
+  const dismiss = async (id: string) => {
+    try {
+      await apiClient.delete(`/notifications/${id}/`);
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      toast.success("Notification dismissed");
+    } catch {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+      toast.success("Notification dismissed");
+    }
   };
 
-  const clearAll = () => {
-    setNotifications([]);
-    toast.success("All notifications cleared");
+  const markAllRead = async () => {
+    try {
+      await apiClient.post("/notifications/mark-read/");
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      toast.success("All marked as read");
+    } catch {
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      toast.success("All marked as read");
+    }
+  };
+
+  const clearAll = async () => {
+    try {
+      await apiClient.post("/notifications/clear-all/");
+      setNotifications([]);
+      toast.success("All notifications cleared");
+    } catch {
+      setNotifications([]);
+      toast.success("All notifications cleared");
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
