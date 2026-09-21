@@ -21,7 +21,7 @@ COPY . /app/
 
 WORKDIR /app/backend
 
-RUN python -m prisma generate --schema=prisma/schema.prisma
+RUN python -m prisma generate --schema=/app/backend/schema.prisma
 
 COPY start.sh /app/backend/start.sh
 RUN chmod +x /app/backend/start.sh

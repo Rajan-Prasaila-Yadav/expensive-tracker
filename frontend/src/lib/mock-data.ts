@@ -3,7 +3,7 @@ import { subMonths, format } from "date-fns";
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type TransactionType = "income" | "expense" | "transfer";
-export type TransactionStatus = "completed" | "pending" | "failed";
+export type TransactionStatus = "completed" | "pending" | "failed" | "cleared";
 
 export type Category = {
   id: string;
