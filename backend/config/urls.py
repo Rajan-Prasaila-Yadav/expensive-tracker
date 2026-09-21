@@ -8,11 +8,25 @@ from apps.categories.views import (
 )
 
 def health_check(request):
+    db_status = "healthy"
+    user_count = 0
+    error_msg = None
+    try:
+        from utils.prisma_client import get_prisma
+        db = get_prisma()
+        user_count = db.user.count()
+    except Exception as e:
+        import traceback
+        db_status = "error"
+        error_msg = f"{type(e).__name__}: {str(e)}"
+
     return JsonResponse({
-        "status": "healthy",
+        "status": "healthy" if db_status == "healthy" else "database_error",
         "service": "FinanceOS Django REST Backend",
         "version": "1.0.0",
-        "database": "PostgreSQL via Prisma",
+        "database": db_status,
+        "usersCount": user_count,
+        "error": error_msg,
     })
 
 urlpatterns = [

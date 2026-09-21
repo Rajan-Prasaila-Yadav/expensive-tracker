@@ -3,6 +3,9 @@ set -e
 
 echo "--> [Start] Initializing FinanceOS Django Backend..."
 
+# Ensure Prisma query engine is ready
+python -m prisma py fetch || echo "Prisma py fetch notice"
+
 # Sync Prisma Schema with Supabase PostgreSQL
 python -m prisma db push --schema=/app/schema.prisma || python -m prisma db push --schema=prisma/schema.prisma || echo "Prisma push warning"
 

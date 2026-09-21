@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY schema.prisma /app/schema.prisma
 COPY . /app/
 
+RUN python -m prisma py fetch
 RUN python -m prisma generate --schema=/app/schema.prisma
 
 COPY start.sh /app/start.sh

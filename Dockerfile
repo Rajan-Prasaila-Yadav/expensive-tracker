@@ -21,6 +21,7 @@ COPY . /app/
 
 WORKDIR /app/backend
 
+RUN python -m prisma py fetch
 RUN python -m prisma generate --schema=prisma/schema.prisma
 
 COPY start.sh /app/backend/start.sh

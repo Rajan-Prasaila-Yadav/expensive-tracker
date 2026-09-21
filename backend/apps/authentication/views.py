@@ -161,7 +161,10 @@ class GoogleAuthView(APIView):
             if avatar and not user.avatar: update_data['avatar'] = avatar
             if name and user.name in ['User', 'Google User']: update_data['name'] = name
             if update_data:
-                user = db.user.update(where={'id': user.id}, data=update_data)
+                try:
+                    user = db.user.update(where={'id': user.id}, data=update_data)
+                except Exception:
+                    pass
 
         tokens = generate_tokens_for_user(user.id, user.email, user.name)
 
@@ -185,16 +188,25 @@ class GoogleAuthView(APIView):
         except Exception:
             pass
 
+        joined_at = None
+        if hasattr(user, 'createdAt') and user.createdAt:
+            try:
+                joined_at = user.createdAt.strftime('%Y-%m-%d')
+            except Exception:
+                joined_at = str(user.createdAt)[:10]
+        if not joined_at:
+            joined_at = datetime.now().strftime('%Y-%m-%d')
+
         return Response({
             'user': {
                 'id': user.id,
                 'name': user.name,
                 'email': user.email,
                 'avatar': user.avatar,
-                'currency': user.currency,
-                'timezone': user.timezone,
-                'language': user.language,
-                'joinedAt': user.createdAt.strftime('%Y-%m-%d'),
+                'currency': getattr(user, 'currency', 'INR'),
+                'timezone': getattr(user, 'timezone', 'Asia/Kolkata'),
+                'language': getattr(user, 'language', 'en'),
+                'joinedAt': joined_at,
             },
             'tokens': tokens,
             'message': 'Google Sign-In successful.'
