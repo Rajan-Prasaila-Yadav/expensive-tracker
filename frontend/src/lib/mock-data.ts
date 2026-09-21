@@ -139,6 +139,13 @@ export function getMonthlyData(months = 6, txs: Transaction[] = []) {
     const d = subMonths(today, months - 1 - i);
     const label = format(d, "MMM");
     const monthTxs = txs.filter((t) => {
+      if (!t.date) return false;
+      const parts = t.date.split("T")[0].split("-");
+      if (parts.length === 3) {
+        const y = Number(parts[0]);
+        const m = Number(parts[1]) - 1;
+        return m === d.getMonth() && y === d.getFullYear();
+      }
       const td = new Date(t.date);
       return td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear();
     });
@@ -161,9 +168,35 @@ export function getCategoryExpenseData(txs: Transaction[] = [], categories: Cate
   return Object.entries(map)
     .map(([catId, amount], idx) => {
       const cat = categories.find((c) => c.id === catId) || getCategoryById(catId);
-      // Clean readable human name, never raw UUID database keys
       const displayName = cat?.name || (catId.length > 20 ? "General Expense" : catId);
       const icon = cat?.icon || "📁";
+      const color = cat?.color || VIBRANT_PALETTE[idx % VIBRANT_PALETTE.length];
+      return {
+        id: catId,
+        name: displayName,
+        icon,
+        amount,
+        pct: total > 0 ? Math.round((amount / total) * 100) : 0,
+        color,
+      };
+    })
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6);
+}
+
+export function getCategoryIncomeData(txs: Transaction[] = [], categories: Category[] = []) {
+  const incomeTxs = txs.filter((t) => t.type === "income");
+  const map: Record<string, number> = {};
+  for (const tx of incomeTxs) {
+    const key = tx.categoryId || tx.sourceId || "general_income";
+    map[key] = (map[key] ?? 0) + tx.amount;
+  }
+  const total = Object.values(map).reduce((s, v) => s + v, 0);
+  return Object.entries(map)
+    .map(([catId, amount], idx) => {
+      const cat = categories.find((c) => c.id === catId) || getCategoryById(catId);
+      const displayName = cat?.name || (catId === "general_income" ? "General Income" : catId.length > 20 ? "Income Stream" : catId);
+      const icon = cat?.icon || "💰";
       const color = cat?.color || VIBRANT_PALETTE[idx % VIBRANT_PALETTE.length];
       return {
         id: catId,

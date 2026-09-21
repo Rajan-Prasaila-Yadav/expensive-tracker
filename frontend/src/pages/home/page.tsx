@@ -6,7 +6,7 @@ import BudgetProgress from "@/components/budget-progress.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import {
-  calcSummary, getMonthlyData, getCategoryExpenseData,
+  calcSummary, getMonthlyData, getCategoryExpenseData, getCategoryIncomeData,
   formatCurrency, getCategoryById,
 } from "@/lib/mock-data.ts";
 import type { Transaction, Budget } from "@/lib/mock-data.ts";
@@ -33,6 +33,9 @@ export default function HomePage() {
   const {
     transactions,
     categories,
+    loading,
+    fetchTransactions,
+    fetchAllMetadata,
     addTransaction,
     updateTransaction,
     deleteTransaction,
@@ -43,8 +46,10 @@ export default function HomePage() {
   const [showAdd, setShowAdd] = useState(false);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [timeframe, setTimeframe] = useState<"all" | "month">("all");
+  const [categoryTab, setCategoryTab] = useState<"expense" | "income">("expense");
 
-  // Fetch live budgets & notifications from Django backend
+  // Fetch live budgets, notifications and refresh transactions from Django backend
   const fetchData = useCallback(async () => {
     try {
       const [budgetsRes, notifsRes] = await Promise.allSettled([
@@ -68,13 +73,25 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchTransactions();
+    fetchAllMetadata();
+  }, [fetchData, fetchTransactions, fetchAllMetadata]);
+
+  // Safe date helper to avoid UTC midnight timezone offset bugs
+  const getTxDate = (dateStr?: string) => {
+    if (!dateStr) return new Date();
+    const parts = dateStr.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    return new Date(dateStr);
+  };
 
   // Current Month Transactions
   const thisMonthTxs = useMemo(() => {
     const now = new Date();
     return transactions.filter((t: Transaction) => {
-      const d = new Date(t.date);
+      const d = getTxDate(t.date);
       return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     });
   }, [transactions]);
@@ -85,47 +102,24 @@ export default function HomePage() {
     const targetMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
     const targetYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
     return transactions.filter((t: Transaction) => {
-      const d = new Date(t.date);
+      const d = getTxDate(t.date);
       return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
     });
   }, [transactions]);
 
   // Summaries
-  const summary = useMemo(() => calcSummary(thisMonthTxs), [thisMonthTxs]);
-  const lastSummary = useMemo(() => calcSummary(lastMonthTxs), [lastMonthTxs]);
-  const net = summary.income - summary.expense;
+  const allTimeSummary = useMemo(() => calcSummary(transactions), [transactions]);
+  const thisMonthSummary = useMemo(() => calcSummary(thisMonthTxs), [thisMonthTxs]);
+  const lastMonthSummary = useMemo(() => calcSummary(lastMonthTxs), [lastMonthTxs]);
 
-  // Real MoM Trends
-  const balanceTrend = useMemo(() => {
-    const lastNet = lastSummary.income - lastSummary.expense;
-    if (lastNet === 0) {
-      return net > 0 ? "+100% vs last month" : net < 0 ? "-100% vs last month" : "No prior period";
-    }
-    const diff = ((net - lastNet) / Math.abs(lastNet)) * 100;
-    return `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}% vs last month`;
-  }, [net, lastSummary]);
-
-  const incomeTrend = useMemo(() => {
-    if (lastSummary.income === 0) {
-      return summary.income > 0 ? `${thisMonthTxs.filter((t) => t.type === "income").length} active records` : "No prior records";
-    }
-    const diff = ((summary.income - lastSummary.income) / lastSummary.income) * 100;
-    return `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}% vs last month`;
-  }, [summary.income, lastSummary.income, thisMonthTxs]);
-
-  const expenseTrend = useMemo(() => {
-    if (lastSummary.expense === 0) {
-      return summary.expense > 0 ? `${thisMonthTxs.filter((t) => t.type === "expense").length} active records` : "No prior records";
-    }
-    const diff = ((summary.expense - lastSummary.expense) / lastSummary.expense) * 100;
-    return `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}% vs last month`;
-  }, [summary.expense, lastSummary.expense, thisMonthTxs]);
+  // Active display summary
+  const displaySummary = timeframe === "month" ? thisMonthSummary : allTimeSummary;
 
   // Live Budgets
   const liveBudgets = useMemo(() => {
     return budgets.map((b) => {
       const liveSpent = transactions
-        .filter((t: Transaction) => t.categoryId === b.categoryId && t.type === "expense" && t.status === "completed")
+        .filter((t: Transaction) => t.categoryId === b.categoryId && t.type === "expense" && (t.status === "completed" || t.status === "cleared" || !t.status))
         .reduce((s: number, t: Transaction) => s + t.amount, 0);
       return { ...b, spent: liveSpent > 0 ? liveSpent : b.spent };
     });
@@ -136,36 +130,63 @@ export default function HomePage() {
   const budgetPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
   const monthlyData = useMemo(() => getMonthlyData(6, transactions), [transactions]);
-  const categoryData = useMemo(() => getCategoryExpenseData(transactions, categories), [transactions, categories]);
-  const recentTxs = transactions.slice(0, 8);
+  const categoryExpenseData = useMemo(() => getCategoryExpenseData(transactions, categories), [transactions, categories]);
+  const categoryIncomeData = useMemo(() => getCategoryIncomeData(transactions, categories), [transactions, categories]);
+
+  // Auto-switch to income if user has no expenses but has income
+  useEffect(() => {
+    if (categoryExpenseData.length === 0 && categoryIncomeData.length > 0) {
+      setCategoryTab("income");
+    }
+  }, [categoryExpenseData.length, categoryIncomeData.length]);
+
+  const activeCategoryData = categoryTab === "expense" ? categoryExpenseData : categoryIncomeData;
+
+  const recentTxs = useMemo(() => {
+    return [...transactions].sort((a, b) => {
+      const timeA = new Date(`${a.date}T${a.time || "00:00"}`).getTime() || new Date(a.date).getTime();
+      const timeB = new Date(`${b.date}T${b.time || "00:00"}`).getTime() || new Date(b.date).getTime();
+      return timeB - timeA;
+    }).slice(0, 8);
+  }, [transactions]);
 
   const summaryCards = [
     {
       label: "Total Balance",
-      value: formatCurrency(net),
+      value: formatCurrency(allTimeSummary.balance),
       icon: Wallet,
-      color: net >= 0 ? "text-[var(--color-income)]" : "text-[var(--color-expense)]",
-      bg: net >= 0 ? "bg-[var(--color-income-bg)]" : "bg-[var(--color-expense-bg)]",
-      trend: balanceTrend,
-      trendPositive: net >= (lastSummary.income - lastSummary.expense),
+      color: allTimeSummary.balance >= 0 ? "text-[var(--color-income)]" : "text-[var(--color-expense)]",
+      bg: allTimeSummary.balance >= 0 ? "bg-[var(--color-income-bg)]" : "bg-[var(--color-expense-bg)]",
+      trend: timeframe === "month"
+        ? (thisMonthSummary.balance >= 0 ? `+${formatCurrency(thisMonthSummary.balance)} this month` : `${formatCurrency(thisMonthSummary.balance)} this month`)
+        : `${transactions.length} total entries recorded`,
+      trendPositive: allTimeSummary.balance >= 0,
     },
     {
-      label: "Total Income",
-      value: formatCurrency(summary.income),
+      label: timeframe === "month" ? "Monthly Income" : "Total Income",
+      value: formatCurrency(displaySummary.income),
       icon: TrendingUp,
       color: "text-[var(--color-income)]",
       bg: "bg-[var(--color-income-bg)]",
-      trend: incomeTrend,
-      trendPositive: summary.income >= lastSummary.income,
+      trend: timeframe === "month"
+        ? (lastMonthSummary.income > 0
+            ? `${((thisMonthSummary.income - lastMonthSummary.income) / lastMonthSummary.income * 100).toFixed(0)}% vs last month`
+            : `${thisMonthTxs.filter((t) => t.type === "income").length} active records this month`)
+        : `${transactions.filter((t) => t.type === "income").length} total income records`,
+      trendPositive: true,
     },
     {
-      label: "Total Expenses",
-      value: formatCurrency(summary.expense),
+      label: timeframe === "month" ? "Monthly Expenses" : "Total Expenses",
+      value: formatCurrency(displaySummary.expense),
       icon: TrendingDown,
       color: "text-[var(--color-expense)]",
       bg: "bg-[var(--color-expense-bg)]",
-      trend: expenseTrend,
-      trendPositive: summary.expense <= lastSummary.expense,
+      trend: timeframe === "month"
+        ? (lastMonthSummary.expense > 0
+            ? `${((thisMonthSummary.expense - lastMonthSummary.expense) / lastMonthSummary.expense * 100).toFixed(0)}% vs last month`
+            : `${thisMonthTxs.filter((t) => t.type === "expense").length} active records this month`)
+        : `${transactions.filter((t) => t.type === "expense").length} total expense records`,
+      trendPositive: displaySummary.expense === 0 || (timeframe === "month" ? thisMonthSummary.expense <= lastMonthSummary.expense : true),
     },
     {
       label: "Budget Used",
@@ -209,6 +230,30 @@ export default function HomePage() {
             </h1>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="flex items-center bg-muted/60 p-0.5 sm:p-1 rounded-xl border border-border/50 text-xs">
+              <button
+                onClick={() => setTimeframe("all")}
+                className={cn(
+                  "px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all cursor-pointer text-[11px] sm:text-xs",
+                  timeframe === "all"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                All Time
+              </button>
+              <button
+                onClick={() => setTimeframe("month")}
+                className={cn(
+                  "px-2.5 sm:px-3 py-1 rounded-lg font-medium transition-all cursor-pointer text-[11px] sm:text-xs",
+                  timeframe === "month"
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                This Month
+              </button>
+            </div>
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -319,25 +364,55 @@ export default function HomePage() {
             </Card>
           </motion.div>
 
-          {/* Expense by Category Pie */}
+          {/* Category & Income Stream Breakdown */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.35, ease: "easeOut" }}
           >
             <Card className="h-full">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-semibold">Expense by Category</CardTitle>
-                <p className="text-xs text-muted-foreground">Spending distribution across categories</p>
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-semibold">
+                    {categoryTab === "expense" ? "Expense by Category" : "Income by Stream"}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {categoryTab === "expense" ? "Spending distribution across categories" : "Income sources distribution"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/50 text-[11px]">
+                  <button
+                    onClick={() => setCategoryTab("expense")}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer",
+                      categoryTab === "expense"
+                        ? "bg-background text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Expense
+                  </button>
+                  <button
+                    onClick={() => setCategoryTab("income")}
+                    className={cn(
+                      "px-2 py-0.5 rounded-md font-medium transition-all cursor-pointer",
+                      categoryTab === "income"
+                        ? "bg-background text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Income
+                  </button>
+                </div>
               </CardHeader>
               <CardContent>
-                {categoryData.length > 0 ? (
+                {activeCategoryData.length > 0 ? (
                   <div className="space-y-4">
                     <div className="h-[150px] w-full flex items-center justify-center">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={categoryData}
+                            data={activeCategoryData}
                             cx="50%"
                             cy="50%"
                             innerRadius={42}
@@ -345,7 +420,7 @@ export default function HomePage() {
                             paddingAngle={3}
                             dataKey="amount"
                           >
-                            {categoryData.map((entry, idx) => (
+                            {activeCategoryData.map((entry, idx) => (
                               <Cell key={`cell-${idx}`} fill={entry.color} />
                             ))}
                           </Pie>
@@ -356,13 +431,13 @@ export default function HomePage() {
                               borderRadius: "10px",
                               fontSize: "12px",
                             }}
-                            formatter={(val: any) => [formatCurrency(Number(val) || 0), "Spent"]}
+                            formatter={(val: any) => [formatCurrency(Number(val) || 0), categoryTab === "expense" ? "Spent" : "Earned"]}
                           />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
                     <div className="space-y-2 max-h-[130px] overflow-y-auto pr-1">
-                      {categoryData.slice(0, 5).map((c) => (
+                      {activeCategoryData.slice(0, 5).map((c) => (
                         <div key={c.id || c.name} className="flex items-center justify-between text-xs py-0.5">
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
@@ -375,8 +450,10 @@ export default function HomePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground">
-                    No expense data recorded yet
+                  <div className="h-[180px] flex items-center justify-center text-xs text-muted-foreground text-center p-4">
+                    {categoryTab === "expense"
+                      ? "No expense data recorded yet. Switch to Income to see earnings."
+                      : "No income data recorded yet."}
                   </div>
                 )}
               </CardContent>
@@ -415,6 +492,11 @@ export default function HomePage() {
                         onView={(t) => setSelectedTx(t)}
                       />
                     ))}
+                  </div>
+                ) : loading ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                    Loading your transactions...
                   </div>
                 ) : (
                   <div className="p-8 text-center text-muted-foreground text-sm">
