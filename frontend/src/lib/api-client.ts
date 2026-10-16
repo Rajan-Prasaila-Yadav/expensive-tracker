@@ -8,10 +8,11 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
  */
 // `/api` is only proxied by Vite during local development.  A deployed static
 // frontend has no such proxy, so it must call the deployed Django API.
-const API_BASE_URL = import.meta.env.VITE_API_URL || (
+const configuredUrl = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/+$/, "") : "";
+const API_BASE_URL = configuredUrl || (
   import.meta.env.DEV
     ? "/api"
-    : "https://expensive-track-ten.vercel.app/api"
+    : "https://expensive-track-ten.vercel.app"
 );
 
 export const apiClient = axios.create({

@@ -5,6 +5,10 @@
       "destination": "https://expensive-track-ten.vercel.app/api/$1"
     },
     {
+      "source": "/auth/(.*)",
+      "destination": "https://expensive-track-ten.vercel.app/auth/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

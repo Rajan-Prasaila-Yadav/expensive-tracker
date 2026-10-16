@@ -29,19 +29,26 @@ def health_check(request):
         "error": error_msg,
     })
 
+api_urlpatterns = [
+    path('auth/', include('apps.authentication.urls')),
+    path('transactions/', include('apps.transactions.urls')),
+    path('categories/', include('apps.categories.urls')),
+    path('payment-methods/', PaymentMethodListCreateView.as_view(), name='payment-methods'),
+    path('payment-methods/<str:pk>/', PaymentMethodDetailView.as_view(), name='payment-methods-detail'),
+    path('income-sources/', IncomeSourceListCreateView.as_view(), name='income-sources'),
+    path('income-sources/<str:pk>/', IncomeSourceDetailView.as_view(), name='income-sources-detail'),
+    path('budgets/', include('apps.budgets.urls')),
+    path('analytics/', include('apps.analytics.urls')),
+    path('reports/', include('apps.reports.urls')),
+    path('notifications/', include('apps.notifications.urls')),
+    path('audit-logs/', include('apps.audit.urls')),
+]
+
 urlpatterns = [
     path('', health_check, name='health-check'),
+    path('health/', health_check, name='health-check-alt'),
     path('admin/', admin.site.urls),
-    path('api/auth/', include('apps.authentication.urls')),
-    path('api/transactions/', include('apps.transactions.urls')),
-    path('api/categories/', include('apps.categories.urls')),
-    path('api/payment-methods/', PaymentMethodListCreateView.as_view(), name='payment-methods'),
-    path('api/payment-methods/<str:pk>/', PaymentMethodDetailView.as_view(), name='payment-methods-detail'),
-    path('api/income-sources/', IncomeSourceListCreateView.as_view(), name='income-sources'),
-    path('api/income-sources/<str:pk>/', IncomeSourceDetailView.as_view(), name='income-sources-detail'),
-    path('api/budgets/', include('apps.budgets.urls')),
-    path('api/analytics/', include('apps.analytics.urls')),
-    path('api/reports/', include('apps.reports.urls')),
-    path('api/notifications/', include('apps.notifications.urls')),
-    path('api/audit-logs/', include('apps.audit.urls')),
+    # Support both /api/... and direct /... without /api prefix
+    path('api/', include(api_urlpatterns)),
+    path('', include(api_urlpatterns)),
 ]
