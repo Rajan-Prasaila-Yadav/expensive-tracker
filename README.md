@@ -4,7 +4,7 @@
 ### Next-Generation Full-Stack Financial Operating System Built with React 19, Django 5 REST Framework, Supabase PostgreSQL, Prisma ORM & Progressive Web App (PWA)
 
 [![Live Frontend](https://img.shields.io/badge/Live_Demo-Vercel_App-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://expensive-tracker-chi-three.vercel.app/)
-[![Backend API](https://img.shields.io/badge/Backend_API-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://expensive-tracker-backend-production.up.railway.app/)
+[![Backend API](https://img.shields.io/badge/Backend_API-Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://expensive-track-ten.vercel.app/)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Rajan-Prasaila-Yadav/expensive-tracker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
@@ -21,7 +21,7 @@
 
 <p align="center">
   <b>🌐 Live Application:</b> <a href="https://expensive-tracker-chi-three.vercel.app/">https://expensive-tracker-chi-three.vercel.app/</a><br/>
-  <b>⚡ REST API Engine:</b> <a href="https://expensive-tracker-backend-production.up.railway.app/">https://expensive-tracker-backend-production.up.railway.app/</a>
+  <b>⚡ REST API Engine:</b> <a href="https://expensive-track-ten.vercel.app/">https://expensive-track-ten.vercel.app/</a>
 </p>
 
 </div>

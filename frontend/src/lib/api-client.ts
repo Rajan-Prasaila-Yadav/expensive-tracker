@@ -11,7 +11,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 const API_BASE_URL = import.meta.env.VITE_API_URL || (
   import.meta.env.DEV
     ? "/api"
-    : "https://expensive-tracker-backend-production.up.railway.app/api"
+    : "https://expensive-track-ten.vercel.app/api"
 );
 
 export const apiClient = axios.create({
